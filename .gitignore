@@ -22,3 +22,5 @@ Videos/
 Results/
 bin/
 build/
+run*
+.vscode/

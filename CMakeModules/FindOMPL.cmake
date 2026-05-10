@@ -18,6 +18,9 @@ include(FindPackageHandleStandardArgs)
 if (NOT OMPL_PREFIX)
     set(OMPL_PREFIX $ENV{OMPL_PREFIX})
 endif()
+if (NOT OMPL_PREFIX)
+    set(OMPL_PREFIX "/usr")
+endif()
 
 if (OMPL_FIND_VERSION)
     set(OMPL_SUFFIX "-${OMPL_VERSION}")
@@ -45,7 +48,7 @@ endif()
 
 # find the OMPL library
 find_library(OMPL_LIBRARY ompl
-    PATHS ${OMPL_LIB_PATH}
+    PATHS ${OMPL_LIB_PATH} /usr/lib/x86_64-linux-gnu
     PATH_SUFFIXES lib build/lib)
 if (OMPL_LIBRARY)
     if (OMPL_FIND_VERSION)
@@ -57,10 +60,10 @@ if (OMPL_LIBRARY)
 endif()
 # find the OMPL.app libraries
 find_library(OMPLAPPBASE_LIBRARY ompl_app_base
-    PATHS ${OMPL_LIB_PATH}
+    PATHS ${OMPL_LIB_PATH} /usr/lib/x86_64-linux-gnu
     PATH_SUFFIXES lib build/lib)
 find_library(OMPLAPP_LIBRARY ompl_app
-    PATHS ${OMPL_LIB_PATH}
+    PATHS ${OMPL_LIB_PATH} /usr/lib/x86_64-linux-gnu
     PATH_SUFFIXES lib build/lib)
 if (OMPLAPPBASE_LIBRARY AND OMPLAPP_LIBRARY)
     if (OMPL_FIND_VERSION)
@@ -76,8 +79,8 @@ endif()
 
 # find include path
 find_path(OMPL_INCLUDE_DIRS SpaceInformation.h
-    PATHS ${OMPL_INCLUDE_PATH}
-    PATH_SUFFIXES base "ompl${OMPL_SUFFIX}/base" "include/ompl${OMPL_SUFFIX}/base" ompl/base include/ompl/base src/ompl/base)
+    PATHS ${OMPL_INCLUDE_PATH} /usr/include
+    PATH_SUFFIXES base ompl-1.5/ompl/base "ompl${OMPL_SUFFIX}/base" "include/ompl${OMPL_SUFFIX}/base" ompl/base include/ompl/base src/ompl/base)
 if (OMPL_INCLUDE_DIRS)
     string(REGEX REPLACE "/ompl/base$" "" OMPL_INCLUDE_DIRS ${OMPL_INCLUDE_DIRS})
 else()

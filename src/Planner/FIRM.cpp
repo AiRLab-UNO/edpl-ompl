@@ -51,6 +51,9 @@
 #include "Visualization/Visualizer.h"
 #include "Utils/FIRMUtils.h"
 #include "Planner/FIRM.h"
+#include <sqlite3.h>
+
+using namespace boost::placeholders;
 
 #define foreach BOOST_FOREACH
 #define foreach_reverse BOOST_REVERSE_FOREACH
@@ -3092,68 +3095,99 @@ void FIRM::loadRoadMapFromFile(const std::string &pathToFile)
     }
 }
 
-void FIRM::writeTimeSeriesDataToFile(std::string fname, std::string dataName)
+void FIRM::writeTimeSeriesDataToFile(std::string /*fname*/, std::string dataName)
 {
-
-    std::ofstream outfile;
-
-    outfile.open(logFilePath_ + fname);
-
-    if(dataName.compare("costToGo")==0)
+    // All history tables are written to the shared SQLite database.
+    std::string dbFile = logFilePath_ + "results.db";
+    sqlite3* db = nullptr;
+    if (sqlite3_open(dbFile.c_str(), &db) != SQLITE_OK)
     {
-        for(int i=0; i < costHistory_.size(); i++)
-        {
-            outfile << std::get<0>(costHistory_[i]) << "," << std::get<1>(costHistory_[i]) << "," << std::get<2>(costHistory_[i]) << std::endl;
-        }
+        OMPL_WARN("FIRM: cannot open SQLite DB at %s", dbFile.c_str());
+        return;
     }
 
-    if(dataName.compare("successProbability")==0)
+    auto exec = [&](const char* sql) {
+        char* err = nullptr;
+        sqlite3_exec(db, sql, nullptr, nullptr, &err);
+        if (err) sqlite3_free(err);
+    };
+
+    exec("PRAGMA journal_mode=WAL;");
+
+    if (dataName == "costToGo")
     {
-        for(int i=0; i < successProbabilityHistory_.size(); i++)
+        exec("CREATE TABLE IF NOT EXISTS cost_history "
+             "(timestep INTEGER, cost_cov REAL, cost REAL);");
+        exec("BEGIN TRANSACTION;");
+        for (const auto& r : costHistory_)
         {
-            outfile<<successProbabilityHistory_[i].first<<","<<successProbabilityHistory_[i].second<<std::endl;
+            std::string s = "INSERT INTO cost_history VALUES (" +
+                std::to_string(std::get<0>(r)) + "," +
+                std::to_string(std::get<1>(r)) + "," +
+                std::to_string(std::get<2>(r)) + ");";
+            exec(s.c_str());
         }
+        exec("COMMIT;");
+    }
+    else if (dataName == "successProbability")
+    {
+        exec("CREATE TABLE IF NOT EXISTS success_probability "
+             "(timestep INTEGER, probability REAL);");
+        exec("BEGIN TRANSACTION;");
+        for (const auto& r : successProbabilityHistory_)
+        {
+            std::string s = "INSERT INTO success_probability VALUES (" +
+                std::to_string(r.first) + "," +
+                std::to_string(r.second) + ");";
+            exec(s.c_str());
+        }
+        exec("COMMIT;");
+    }
+    else if (dataName == "nodesReached")
+    {
+        exec("CREATE TABLE IF NOT EXISTS nodes_reached "
+             "(timestep INTEGER, count INTEGER);");
+        exec("BEGIN TRANSACTION;");
+        for (const auto& r : nodeReachedHistory_)
+        {
+            std::string s = "INSERT INTO nodes_reached VALUES (" +
+                std::to_string(r.first) + "," +
+                std::to_string(r.second) + ");";
+            exec(s.c_str());
+        }
+        exec("COMMIT;");
+    }
+    else if (dataName == "stationaryPenalty")
+    {
+        exec("CREATE TABLE IF NOT EXISTS stationary_penalty "
+             "(timestep INTEGER, num_penalized_nodes INTEGER, sum_penalties REAL);");
+        exec("BEGIN TRANSACTION;");
+        for (const auto& r : stationaryPenaltyHistory_)
+        {
+            std::string s = "INSERT INTO stationary_penalty VALUES (" +
+                std::to_string(std::get<0>(r)) + "," +
+                std::to_string(std::get<1>(r)) + "," +
+                std::to_string(std::get<2>(r)) + ");";
+            exec(s.c_str());
+        }
+        exec("COMMIT;");
+    }
+    else if (dataName == "velocity")
+    {
+        exec("CREATE TABLE IF NOT EXISTS velocity "
+             "(timestep INTEGER, velocity REAL);");
+        exec("BEGIN TRANSACTION;");
+        for (const auto& r : velocityHistory_)
+        {
+            std::string s = "INSERT INTO velocity VALUES (" +
+                std::to_string(r.first) + "," +
+                std::to_string(r.second) + ");";
+            exec(s.c_str());
+        }
+        exec("COMMIT;");
     }
 
-    if(dataName.compare("nodesReached")==0)
-    {
-        for(int i=0; i < nodeReachedHistory_.size(); i++)
-        {
-            outfile<<nodeReachedHistory_[i].first<<","<<nodeReachedHistory_[i].second<<std::endl;
-        }
-    }
-
-    if(dataName.compare("stationaryPenalty")==0)
-    {
-        for(int i=0; i < stationaryPenaltyHistory_.size(); i++)
-        {
-            outfile << std::get<0>(stationaryPenaltyHistory_[i]) << "," << std::get<1>(stationaryPenaltyHistory_[i]) << "," << std::get<2>(stationaryPenaltyHistory_[i]) << std::endl;
-        }
-    }
-
-    if(dataName.compare("velocity")==0)
-    {
-        for(int i=0; i < velocityHistory_.size(); i++)
-        {
-            outfile<<velocityHistory_[i].first<<","<<velocityHistory_[i].second<<std::endl;
-        }
-    }
-
-    if(dataName.compare("multiModalWeights")==0)
-    {
-        for(int i=0; i < successProbabilityHistory_.size(); i++)
-        {
-            outfile<<weightsHistory_[i].first<<",";
-
-            for(int j=0; j< weightsHistory_[i].second.size(); j++)
-            {
-                outfile<<weightsHistory_[i].second[j]<<",";
-            }
-            outfile<<std::endl;
-        }
-    }
-
-    outfile.close();
+    sqlite3_close(db);
 }
 
 void FIRM::loadParametersFromFile(const std::string &pathToFile)
