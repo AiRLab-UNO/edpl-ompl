@@ -53,7 +53,7 @@ class FIRMUtils
         static int generateRandomIntegerInRange(const int floor, const int ceiling);
 
         /** \brief Save the FIRM graph to an XML file */
-        static void writeFIRMGraphToXML(const std::vector<std::pair<int,std::pair<arma::colvec,arma::mat> > > nodes, const std::vector<std::pair<std::pair<int,int>,FIRMWeight> > edgeWeights);
+        static void writeFIRMGraphToXML(const std::vector<std::pair<int,std::pair<arma::colvec,arma::mat> > > nodes, const std::vector<std::pair<std::pair<int,int>,FIRMWeight> > edgeWeights, const std::string &outputPath = "./");
 
         /** \brief Reads the Graph properties from an XML file */
         static bool readFIRMGraphFromXML(const std::string &pathToXML,std::vector<std::pair<int, arma::colvec> > &FIRMNodePosList, std::vector<std::pair<int, arma::mat> > &FIRMNodeCovarianceList, std::vector<std::pair<std::pair<int,int>,FIRMWeight> > &edgeWeights);

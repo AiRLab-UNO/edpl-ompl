@@ -3007,7 +3007,7 @@ void FIRM::savePlannerData()
 
     }
 
-    FIRMUtils::writeFIRMGraphToXML(nodes, edgeWeights);
+    FIRMUtils::writeFIRMGraphToXML(nodes, edgeWeights, logFilePath_);
 
 }
 
