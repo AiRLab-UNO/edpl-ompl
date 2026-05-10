@@ -51,6 +51,8 @@
 #include "Visualization/Visualizer.h"
 #include "Utils/FIRMUtils.h"
 #include "Planner/FIRM.h"
+#include "ObservationModels/HeadingBeaconObservationModel.h"
+#include "Spaces/SE2BeliefSpace.h"
 #include <sqlite3.h>
 
 using namespace boost::placeholders;
@@ -651,6 +653,11 @@ ompl::base::PlannerStatus FIRM::solve(const ompl::base::PlannerTerminationCondit
     if(doSavePlannerData_)
     {
         this->savePlannerData();
+    }
+
+    if(doSaveLogs_)
+    {
+        this->saveSetupAndGraphToDB();
     }
 
     // NOTE disabled periodic solution checking
@@ -3002,6 +3009,124 @@ void FIRM::savePlannerData()
 
     FIRMUtils::writeFIRMGraphToXML(nodes, edgeWeights);
 
+}
+
+void FIRM::saveSetupAndGraphToDB()
+{
+    if (logFilePath_.empty()) return;
+
+    const std::string dbFile = logFilePath_ + "results.db";
+    sqlite3* db = nullptr;
+    if (sqlite3_open(dbFile.c_str(), &db) != SQLITE_OK)
+    {
+        OMPL_WARN("FIRM: cannot open SQLite DB at %s", dbFile.c_str());
+        return;
+    }
+
+    auto exec = [&](const std::string& sql) {
+        char* err = nullptr;
+        sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &err);
+        if (err) sqlite3_free(err);
+    };
+
+    exec("PRAGMA journal_mode=WAL;");
+
+    exec("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT);");
+    exec("CREATE TABLE IF NOT EXISTS bounds (low_x REAL, high_x REAL, low_y REAL, high_y REAL);");
+    exec("CREATE TABLE IF NOT EXISTS landmarks (id INTEGER, x REAL, y REAL);");
+    exec("CREATE TABLE IF NOT EXISTS start_state (x REAL, y REAL, theta REAL);");
+    exec("CREATE TABLE IF NOT EXISTS goal_state (x REAL, y REAL, theta REAL);");
+    exec("CREATE TABLE IF NOT EXISTS roadmap_nodes ("
+         "id INTEGER PRIMARY KEY, x REAL, y REAL, theta REAL,"
+         "cov_xx REAL, cov_xy REAL, cov_yy REAL, is_start INTEGER, is_goal INTEGER);");
+    exec("CREATE TABLE IF NOT EXISTS roadmap_edges ("
+         "source INTEGER, target INTEGER, cost REAL, success_prob REAL);");
+
+    exec("BEGIN TRANSACTION;");
+    exec("DELETE FROM bounds;");
+    exec("DELETE FROM landmarks;");
+    exec("DELETE FROM start_state;");
+    exec("DELETE FROM goal_state;");
+    exec("DELETE FROM roadmap_nodes;");
+    exec("DELETE FROM roadmap_edges;");
+
+    exec("INSERT OR REPLACE INTO metadata VALUES ('planner','" + getName() + "');");
+    exec("INSERT OR REPLACE INTO metadata VALUES ('num_nodes','" +
+         std::to_string(boost::num_vertices(g_)) + "');");
+    exec("INSERT OR REPLACE INTO metadata VALUES ('num_edges','" +
+         std::to_string(boost::num_edges(g_)) + "');");
+
+    if (auto ss = si_->getStateSpace()->as<SE2BeliefSpace>())
+    {
+        const auto& b = ss->getBounds();
+        if (b.low.size() >= 2 && b.high.size() >= 2)
+        {
+            exec("INSERT INTO bounds VALUES (" +
+                 std::to_string(b.low[0]) + "," + std::to_string(b.high[0]) + "," +
+                 std::to_string(b.low[1]) + "," + std::to_string(b.high[1]) + ");");
+        }
+    }
+
+    auto headingObs = std::dynamic_pointer_cast<HeadingBeaconObservationModel>(
+        siF_->getObservationModel());
+    if (headingObs)
+    {
+        const auto& lms = headingObs->getLandmarks();
+        for (size_t i = 0; i < lms.size(); ++i)
+        {
+            if (lms[i].n_elem < 3) continue;
+            exec("INSERT INTO landmarks VALUES (" +
+                 std::to_string(static_cast<int>(lms[i][0])) + "," +
+                 std::to_string(lms[i][1]) + "," +
+                 std::to_string(lms[i][2]) + ");");
+        }
+    }
+
+    auto writePoseRow = [&](const std::string& tbl, const ompl::base::State* s) {
+        if (!s) return;
+        arma::colvec x = s->as<FIRM::StateType>()->getArmaData();
+        if (x.n_elem < 3) return;
+        exec("INSERT INTO " + tbl + " VALUES (" +
+             std::to_string(x[0]) + "," + std::to_string(x[1]) + "," +
+             std::to_string(x[2]) + ");");
+    };
+
+    for (auto v : startM_) writePoseRow("start_state", stateProperty_[v]);
+    for (auto v : goalM_)  writePoseRow("goal_state",  stateProperty_[v]);
+
+    std::set<Vertex> startSet(startM_.begin(), startM_.end());
+    std::set<Vertex> goalSet(goalM_.begin(), goalM_.end());
+
+    foreach (Vertex v, boost::vertices(g_))
+    {
+        arma::colvec x   = stateProperty_[v]->as<FIRM::StateType>()->getArmaData();
+        arma::mat   cov  = stateProperty_[v]->as<FIRM::StateType>()->getCovariance();
+        if (x.n_elem < 3) continue;
+        const double cxx = (cov.n_rows >= 1 && cov.n_cols >= 1) ? cov(0,0) : 0.0;
+        const double cxy = (cov.n_rows >= 2 && cov.n_cols >= 2) ? cov(0,1) : 0.0;
+        const double cyy = (cov.n_rows >= 2 && cov.n_cols >= 2) ? cov(1,1) : 0.0;
+        exec("INSERT INTO roadmap_nodes VALUES (" +
+             std::to_string(static_cast<int>(v)) + "," +
+             std::to_string(x[0]) + "," + std::to_string(x[1]) + "," + std::to_string(x[2]) + "," +
+             std::to_string(cxx) + "," + std::to_string(cxy) + "," + std::to_string(cyy) + "," +
+             std::to_string(startSet.count(v) ? 1 : 0) + "," +
+             std::to_string(goalSet.count(v) ? 1 : 0) + ");");
+    }
+
+    foreach (Edge e, boost::edges(g_))
+    {
+        const Vertex s = boost::source(e, g_);
+        const Vertex t = boost::target(e, g_);
+        const FIRMWeight w = boost::get(boost::edge_weight, g_, e);
+        exec("INSERT INTO roadmap_edges VALUES (" +
+             std::to_string(static_cast<int>(s)) + "," +
+             std::to_string(static_cast<int>(t)) + "," +
+             std::to_string(w.getCost()) + "," +
+             std::to_string(w.getSuccessProbability()) + ");");
+    }
+
+    exec("COMMIT;");
+    sqlite3_close(db);
 }
 
 

@@ -78,9 +78,14 @@ if (OMPLAPPBASE_LIBRARY AND OMPLAPP_LIBRARY)
 endif()
 
 # find include path
+# NOTE: /usr/local is searched first so the headers match libompl.so when both
+#       a system OMPL (e.g. 1.5 in /usr) and a locally installed OMPL
+#       (e.g. 1.6 in /usr/local) are present. Mismatched headers/library
+#       silently corrupt vtables for ompl::base classes and segfault at runtime.
 find_path(OMPL_INCLUDE_DIRS SpaceInformation.h
-    PATHS ${OMPL_INCLUDE_PATH} /usr/include
-    PATH_SUFFIXES base ompl-1.5/ompl/base "ompl${OMPL_SUFFIX}/base" "include/ompl${OMPL_SUFFIX}/base" ompl/base include/ompl/base src/ompl/base)
+    PATHS ${OMPL_INCLUDE_PATH} /usr/local/include /usr/include
+    PATH_SUFFIXES base ompl-1.6/ompl/base ompl-1.5/ompl/base "ompl${OMPL_SUFFIX}/base" "include/ompl${OMPL_SUFFIX}/base" ompl/base include/ompl/base src/ompl/base
+    NO_DEFAULT_PATH)
 if (OMPL_INCLUDE_DIRS)
     string(REGEX REPLACE "/ompl/base$" "" OMPL_INCLUDE_DIRS ${OMPL_INCLUDE_DIRS})
 else()

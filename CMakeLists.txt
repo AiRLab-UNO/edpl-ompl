@@ -35,9 +35,10 @@ find_package(TINYXML REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 
-# FCL
+# FCL (and its transitive dependency libccd)
 find_library(FCL_LIBRARY fcl REQUIRED)
 find_path(FCL_INCLUDE_DIR fcl/fcl.h)
+find_library(CCD_LIBRARY ccd REQUIRED)
 
 # assimp
 find_library(ASSIMP_LIBRARY assimp REQUIRED)
@@ -104,11 +105,13 @@ target_link_libraries(bsp_lib
 add_executable(bsp-app-demo src/main_firm.cpp)
 target_link_libraries(bsp-app-demo
     bsp_lib
-    libfcl.so
+    ${FCL_LIBRARY}
+    ${CCD_LIBRARY}
 )
 
 add_executable(firmcp-demo src/main_firmcp.cpp)
 target_link_libraries(firmcp-demo
     bsp_lib
-    libfcl.so
+    ${FCL_LIBRARY}
+    ${CCD_LIBRARY}
 )

@@ -103,6 +103,8 @@ class HeadingBeaconObservationModel : public ObservationModelMethod
 
     bool isStateObservable(const ompl::base::State *state);
 
+    const std::vector<arma::colvec>& getLandmarks() const { return landmarks_; }
+
   private:
 
     /** \brief Estimates the range and bearing from given state to landmark */
