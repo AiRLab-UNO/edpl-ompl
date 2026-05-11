@@ -1,5 +1,6 @@
 bsp-app-demo
 firmcp-demo
+firmcp-stl-demo
 *.layout
 *.depend
 *.o
@@ -22,5 +23,5 @@ Videos/
 Results/
 bin/
 build/
-run*
+run-*
 .vscode/

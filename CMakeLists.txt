@@ -21,7 +21,15 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_CXX_FLAGS "-std=c++14")
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
     "/usr/share/cmake-2.8/Modules/"
-    "${PROJECT_SOURCE_DIR}/CMakeModules/")
+    "${PROJECT_SOURCE_DIR}/CMakeModules/"
+    "/home/redwan/CppDev/stl_bow_v2/cmake/")
+
+# stl_bow_v2 integration
+set(STL_BOW_ROOT "/home/redwan/CppDev/stl_bow_v2" CACHE PATH "stl_bow_v2 source root")
+set(CollisionChecker_ROOT "${STL_BOW_ROOT}/lib/collision" CACHE PATH "Root directory of CollisionChecker")
+find_package(CollisionChecker REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 # Required packages
 find_package(Boost REQUIRED COMPONENTS
@@ -54,6 +62,9 @@ include_directories(
     ${SQLITE3_INCLUDE_DIRS}
     ${FCL_INCLUDE_DIR}
     ${ASSIMP_INCLUDE_DIR}
+    ${CollisionChecker_INCLUDE_DIRS}
+    ${STL_BOW_ROOT}/include
+    ${STL_BOW_ROOT}/include/STLRom
 )
 
 link_directories(
@@ -90,6 +101,16 @@ add_library(bsp_lib
     src/Visualization/GLWidget.cpp
     src/Filters/ExtendedKF.cpp
     src/Filters/LinearizedKF.cpp
+    src/STL/SpecLandmarks.cpp
+    src/STL/STLStateValidityChecker.cpp
+    src/STL/STLRobustness.cpp
+    src/STL/STLGuidedFIRMCP.cpp
+)
+
+# Use stl_bow_v2's pre-built static STLRom library to expose stl_driver / monitors.
+add_library(stlrom_imported STATIC IMPORTED)
+set_target_properties(stlrom_imported PROPERTIES
+    IMPORTED_LOCATION "${STL_BOW_ROOT}/build/libstlrom.a"
 )
 
 target_link_libraries(bsp_lib
@@ -100,6 +121,9 @@ target_link_libraries(bsp_lib
     ${SQLITE3_LIBRARIES}
     ${FCL_LIBRARY}
     ${ASSIMP_LIBRARY}
+    ${CollisionChecker_LIBRARIES}
+    yaml-cpp::yaml-cpp
+    stlrom_imported
 )
 
 add_executable(bsp-app-demo src/main_firm.cpp)
@@ -111,6 +135,13 @@ target_link_libraries(bsp-app-demo
 
 add_executable(firmcp-demo src/main_firmcp.cpp)
 target_link_libraries(firmcp-demo
+    bsp_lib
+    ${FCL_LIBRARY}
+    ${CCD_LIBRARY}
+)
+
+add_executable(firmcp-stl-demo src/main_firmcp_stl.cpp)
+target_link_libraries(firmcp-stl-demo
     bsp_lib
     ${FCL_LIBRARY}
     ${CCD_LIBRARY}

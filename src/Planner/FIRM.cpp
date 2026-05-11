@@ -1829,12 +1829,21 @@ void FIRM::executeFeedback(void)
 
 
     OMPL_INFORM("FIRM: Running policy execution");
+    reachedGoalDuringExecution_ = false;
 
     while(!goalState->as<FIRM::StateType>()->isReached(cstartState))
     {
+        if(maxExecutionSteps_ > 0 && currentTimeStep_ >= maxExecutionSteps_)
+        {
+            OMPL_WARN("FIRM: hit maxExecutionSteps_=%d, aborting executeFeedback", maxExecutionSteps_);
+            break;
+        }
         // this implicitly means that isReached() for the goal is satisfied (by the node controller)
         if(currentVertex==goal)
+        {
+            reachedGoalDuringExecution_ = true;
             break;
+        }
 
         Edge e = feedback_.at(currentVertex);
 
@@ -2049,12 +2058,21 @@ void FIRM::executeFeedbackWithKidnapping(void)
     int kidnappingCounter  = 0;
 
     Visualizer::doSaveVideo(doSaveVideo_);
+    reachedGoalDuringExecution_ = false;
 
     while(!goalState->as<FIRM::StateType>()->isReached(cstartState)/*currentVertex != goal*/)
     {
+        if(maxExecutionSteps_ > 0 && currentTimeStep_ >= maxExecutionSteps_)
+        {
+            OMPL_WARN("FIRM: hit maxExecutionSteps_=%d, aborting executeFeedbackWithRollout", maxExecutionSteps_);
+            break;
+        }
 
         if(currentVertex==goal)
+        {
+            reachedGoalDuringExecution_ = true;
             break;
+        }
 
         Edge e = feedback_.at(currentVertex);
 

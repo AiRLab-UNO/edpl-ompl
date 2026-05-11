@@ -42,6 +42,8 @@
 #define foreach BOOST_FOREACH
 #define foreach_reverse BOOST_REVERSE_FOREACH
 
+bool FIRMCP::verbose_ = false;
+
 FIRMCP::FIRMCP(const firm::SpaceInformation::SpaceInformationPtr &si, bool debugMode)
     : FIRM(si, debugMode)
 {
@@ -263,12 +265,24 @@ void FIRMCP::executeFeedbackWithPOMCP(void)
 
 
     OMPL_INFORM("FIRMCP: Running POMCP on top of FIRM");
+    reachedGoalDuringExecution_ = false;
 
     // While the robot state hasn't reached the goal state, keep running
     // HACK setting relaxedConstraint argument to false means isReached() condition is exceptionally relaxed for termination
     while(!goalState->as<FIRM::StateType>()->isReached(cstartState, true))
     //while(!goalState->as<FIRM::StateType>()->isReached(cstartState, false))
     {
+        if(maxExecutionSteps_ > 0 && currentTimeStep_ >= maxExecutionSteps_)
+        {
+            OMPL_WARN("FIRMCP: hit maxExecutionSteps_=%d, aborting executeFeedbackWithPOMCP", maxExecutionSteps_);
+            break;
+        }
+        if(maxGraphVertices_ > 0 && (int)boost::num_vertices(g_) >= maxGraphVertices_)
+        {
+            OMPL_WARN("FIRMCP: graph reached %d vertices (cap=%d), aborting executeFeedbackWithPOMCP",
+                      (int)boost::num_vertices(g_), maxGraphVertices_);
+            break;
+        }
 
         // [0] POMCP
         {
@@ -491,17 +505,21 @@ void FIRMCP::executeFeedbackWithPOMCP(void)
 
     } // while()
 
+    // If we exited because the loop condition went false (goal reached) rather
+    // than the maxExecutionSteps_ break above, record that.
+    if(!(maxExecutionSteps_ > 0 && currentTimeStep_ >= maxExecutionSteps_))
+        reachedGoalDuringExecution_ = true;
 
-    // for analysis
 
-    // this data is also saved in run-(TIMESTAMP)/FIRMCPCostHistory.csv
-    std::cout << std::endl;
-    std::cout << "Execution time steps: " << currentTimeStep_ << std::endl;
-    std::cout << "Execution covariance cost: " << executionCostCov_ << std::endl;
-    std::cout << "Execution cost: " << executionCost_ << "  ( = " << informationCostWeight_ << "*" << executionCostCov_ << " + " << timeCostWeight_ << "*" << currentTimeStep_ << " )" << std::endl;     // 1)
-    //std::cout << "Execution cost: " << executionCost_ << "  ( = " << informationCostWeight_ << "*" << executionCostCov_ << "/" << currentTimeStep_ << " + " << timeCostWeight_ << "*" << currentTimeStep_ << " )" << std::endl;     // 3)
-    //std::cout << "Execution cost: " << executionCost_ << "  ( = " << informationCostWeight_ << "*" << executionCostCov_ << " )" << std::endl;     // 4)
-    std::cout << std::endl;
+    // for analysis (chatter only when verbose; data is also saved in results.db)
+    if (verbose_)
+    {
+        std::cout << std::endl;
+        std::cout << "Execution time steps: " << currentTimeStep_ << std::endl;
+        std::cout << "Execution covariance cost: " << executionCostCov_ << std::endl;
+        std::cout << "Execution cost: " << executionCost_ << "  ( = " << informationCostWeight_ << "*" << executionCostCov_ << " + " << timeCostWeight_ << "*" << currentTimeStep_ << " )" << std::endl;
+        std::cout << std::endl;
+    }
 
     // this data is also saved in run-(TIMESTAMP)/FIRMCPCostHistory.csv
     //std::cout << "Number of nodes with stationary penalty: " << numberOfStationaryPenalizedNodes_ << std::endl;
@@ -560,8 +578,7 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
             continue;
         }
         siF_->setTrueState(sampState);  // true state is only used for collision check by checkTrueStateValidity()
-        // for debug
-        std::cout << currentVertex;
+        if (verbose_) std::cout << currentVertex;
 
         // run Monte Carlo simulation for one particle and update cost-to-go and number of visits
         int currentDepth = 0;
@@ -570,8 +587,7 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
 
         double totalCostToGo = pomcpSimulate(currentVertex, currentDepth, selectedEdgeDummy, collisionDepth);
 
-        // for debug
-        std::cout << "thisQVmincosttogo: " << totalCostToGo << std::endl;
+        if (verbose_) std::cout << "thisQVmincosttogo: " << totalCostToGo << std::endl;
     }
 
 
@@ -581,14 +597,12 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
     std::vector<Vertex> minQcosttogoNodes;
     Vertex childQnode, selectedChildQnode;
     double childQcosttogo;
-    // for debug
-    std::cout << "childQcosttogoes: ";
+    if (verbose_) std::cout << "childQcosttogoes: ";
     for (int j=0; j<childQnodes.size(); j++)
     {
         childQnode = childQnodes[j];
         childQcosttogo = stateProperty_[currentVertex]->as<FIRM::StateType>()->getChildQcosttogo(childQnode);
-        // for debug
-        std::cout << "[" << childQnode << "]" << childQcosttogo << " ";
+        if (verbose_) std::cout << "[" << childQnode << "]" << childQcosttogo << " ";
 
         if (minQcosttogo >= childQcosttogo)
         {
@@ -614,11 +628,13 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
     // get the selected edge
     Edge selectedEdge = boost::edge(currentVertex, selectedChildQnode, g_).first;
 
-    // for debug
-    std::cout << std::endl;
-    std::cout << "minQcosttogo: " << "[" << selectedChildQnode << "]" << minQcosttogo << std::endl;
-    std::cout << "executionCost: " << executionCost_ << std::endl;
-    std::cout << "expTotalCost: " << minQcosttogo + executionCost_ << std::endl;
+    if (verbose_)
+    {
+        std::cout << std::endl;
+        std::cout << "minQcosttogo: " << "[" << selectedChildQnode << "]" << minQcosttogo << std::endl;
+        std::cout << "executionCost: " << executionCost_ << std::endl;
+        std::cout << "expTotalCost: " << minQcosttogo + executionCost_ << std::endl;
+    }
 
 
     // restore the current true state
@@ -727,11 +743,13 @@ double FIRMCP::pomcpSimulate(const Vertex currentVertex, const int currentDepth,
         OMPL_ERROR("Failed to updateQVnodeBeliefOnPOMCPTree()!");
         return infiniteCostToGo_;
     }
-    // for debug
-    if (currentDepth < maxPOMCPDepth_)
-        std::cout << "-[" << selectedChildQnode << "]-" << evolvedVertex;
-    else
-        std::cout << ".[" << selectedChildQnode << "]." << evolvedVertex;
+    if (verbose_)
+    {
+        if (currentDepth < maxPOMCPDepth_)
+            std::cout << "-[" << selectedChildQnode << "]-" << evolvedVertex;
+        else
+            std::cout << ".[" << selectedChildQnode << "]." << evolvedVertex;
+    }
 
 
     // RECURSIVELY CALL pomcpSimulate()
@@ -958,11 +976,13 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
         OMPL_ERROR("Failed to updateQVnodeBeliefOnPOMCPTree()!");
         return infiniteCostToGo_;
     }
-    // for debug
-    if (currentDepth < maxPOMCPDepth_)
-        std::cout << "~(" << selectedChildQnode << ")~" << evolvedVertex;
-    else
-        std::cout << ".(" << selectedChildQnode << ")." << evolvedVertex;
+    if (verbose_)
+    {
+        if (currentDepth < maxPOMCPDepth_)
+            std::cout << "~(" << selectedChildQnode << ")~" << evolvedVertex;
+        else
+            std::cout << ".(" << selectedChildQnode << ")." << evolvedVertex;
+    }
 
 
     // RECURSIVELY CALL pomcpRollout()
@@ -1803,8 +1823,7 @@ FIRM::Edge FIRMCP::generateRolloutPolicy(const FIRM::Vertex currentVertex, const
         // The node to which next firm edge goes
         //Vertex targetOfNextFIRMEdge = boost::target(nextFIRMEdge, g_);
 
-        // for debug
-        if(ompl::magic::PRINT_FEEDBACK_PATH)
+        if (verbose_ && ompl::magic::PRINT_FEEDBACK_PATH)
             std::cout << "PATH[" << currentVertex;
 
         // Check if feedback from target to goal is valid or not
@@ -1851,9 +1870,7 @@ FIRM::Edge FIRMCP::generateRolloutPolicy(const FIRM::Vertex currentVertex, const
         double edgeCostToGo = transitionProbability*nextNodeCostToGo + (1-transitionProbability)*obstacleCostToGo_ + edgeWeight.getCost() + stationaryPenalty;  // HACK only for rollout policy search; actual execution cost will not consider stationaryPenalty
 
 
-        // for debug
-        if(ompl::magic::PRINT_COST_TO_GO)
-            //std::cout << "COST[" << currentVertex << "->" << targetNode << "->G] " << edgeCostToGo << " = " << transitionProbability << "*" << nextNodeCostToGo << " + " << "(1-" << transitionProbability << ")*" << obstacleCostToGo_ << " + " << edgeWeight.getCost() << std::endl;
+        if (verbose_ && ompl::magic::PRINT_COST_TO_GO)
             std::cout << "COST[" << currentVertex << "->" << targetNode << "->G] " << edgeCostToGo << " = " << transitionProbability << "*" << nextNodeCostToGo << " + " << "(1-" << transitionProbability << ")*" << obstacleCostToGo_ << " + " << edgeWeight.getCost() << " + " << stationaryPenalty << std::endl;
 
 
@@ -1869,8 +1886,7 @@ FIRM::Edge FIRMCP::generateRolloutPolicy(const FIRM::Vertex currentVertex, const
         }
     }
 
-    // for debug
-    if(ompl::magic::PRINT_COST_TO_GO)
+    if (verbose_ && ompl::magic::PRINT_COST_TO_GO)
         std::cout << "minC[" << minCostVertCurrent << "->" << minCostVertNext << "->G] " << minCost << std::endl;
 
     return edgeToTake;

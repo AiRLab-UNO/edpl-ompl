@@ -476,6 +476,22 @@ public:
         policyExecutionSI_->setStateValidityChecker(svc);
     }
 
+    /** \brief Cap the number of simulated steps the executor is allowed
+     *  to take before bailing out. Set to <=0 (the default) for unbounded. */
+    void setMaxExecutionSteps(int n) { maxExecutionSteps_ = n; }
+    int  getMaxExecutionSteps() const { return maxExecutionSteps_; }
+    int  getExecutionTimeStep() const { return currentTimeStep_; }
+    bool reachedGoalDuringExecution() const { return reachedGoalDuringExecution_; }
+
+    /** \brief Cap the FIRM graph at this many vertices during execution.
+     *  When the cap is exceeded the executor breaks out cleanly. <=0 = no cap.
+     *  Useful to avoid OOM in long FIRMCP+POMCP runs (POMCP grows the graph). */
+    void setMaxGraphVertices(int n) { maxGraphVertices_ = n; }
+    int  getMaxGraphVertices() const { return maxGraphVertices_; }
+
+    /** \brief Run-folder path (already includes a trailing slash). */
+    const std::string& getLogFilePath() const { return logFilePath_; }
+
 protected:
 
     /** \brief Free all the memory allocated by the planner */
@@ -774,6 +790,18 @@ protected:
     int numberOfTargetsInHistory_;
 
     int numberOfFeedbackLookAhead_;
+
+    /** \brief Hard cap on currentTimeStep_ inside executeFeedback*().
+     *  <=0 means no cap. */
+    int maxExecutionSteps_ = 0;
+
+    /** \brief Hard cap on boost::num_vertices(g_) during execution.
+     *  <=0 means no cap. */
+    int maxGraphVertices_ = 0;
+
+    /** \brief Set true if the most recent execute*() call exited because the
+     *  robot reached the goal (rather than the step cap or an error). */
+    bool reachedGoalDuringExecution_ = false;
 };
 
 

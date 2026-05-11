@@ -44,6 +44,13 @@ class FIRMCP : public FIRM
 
 public:
 
+    /** \brief When false (default) the planner's per-iteration debug chatter
+     *  (childQcosttogoes, thisQVmincosttogo, expTotalCost, ...) is suppressed.
+     *  Flip to true via `FIRMCP::setVerbose(true)` to restore the original
+     *  noisy output. */
+    static bool verbose_;
+    static void setVerbose(bool v) { verbose_ = v; }
+
     /** \brief Constructor */
     FIRMCP(const firm::SpaceInformation::SpaceInformationPtr &si, bool debugMode=false);
 

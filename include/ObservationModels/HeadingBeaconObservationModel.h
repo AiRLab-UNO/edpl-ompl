@@ -72,6 +72,15 @@ class HeadingBeaconObservationModel : public ObservationModelMethod
         this->loadParameters(pathToSetupFile);
     }
 
+    /** \brief Construct an empty model; landmarks/noise must be set explicitly.
+     *  Used by the STL-driven setup which sources targets from a .spec file. */
+    explicit HeadingBeaconObservationModel(ompl::control::SpaceInformationPtr si)
+        : ObservationModelMethod(si)
+    {
+        sigma_        = arma::colvec({0.005});
+        sigmaHeading_ = arma::colvec({1e-6});
+    }
+
     /** \brief z = h(x,v) get the observation for a given configuration, corrupted by noise from a given distribution */
     ObservationType getObservation(const ompl::base::State *state, bool isSimulation);
 
@@ -104,6 +113,16 @@ class HeadingBeaconObservationModel : public ObservationModelMethod
     bool isStateObservable(const ompl::base::State *state);
 
     const std::vector<arma::colvec>& getLandmarks() const { return landmarks_; }
+
+    // Replace the XML-loaded landmarks with a programmatically-supplied set.
+    // Used by the STL integration where targets come from a .spec file.
+    void setLandmarks(const std::vector<arma::colvec>& lms) { landmarks_ = lms; }
+
+    void setObservationNoise(double sigma_ss, double sigma_heading)
+    {
+        sigma_       = arma::colvec({sigma_ss});
+        sigmaHeading_ = arma::colvec({sigma_heading});
+    }
 
   private:
 
