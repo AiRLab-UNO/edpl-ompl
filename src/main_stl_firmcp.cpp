@@ -1,21 +1,22 @@
 /*
- * FIRMCP demo — headless (no Qt/GL).
+ * STL-FIRMCP demo — headless (no Qt/GL).
+ * Uses STLFIRMCP planner that blends FIRM global heuristic with STL robustness.
  * Results are saved to a SQLite database in the run log directory.
  */
 #include <iostream>
-#include "Setup/TwoDPointRobotFIRMCPSetup.h"
+#include "Setup/TwoDPointRobotSTLFIRMCPSetup.h"
 
 int main(int argc, char* argv[])
 {
     if (argc < 2)
     {
-        std::cerr << "Usage: " << argv[0] << " <setup_file.xml>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <setup_file.yaml>" << std::endl;
         return 1;
     }
 
     arma::arma_rng::set_seed_random();
 
-    TwoDPointRobotFIRMCPSetup mySetup;
+    TwoDPointRobotSTLFIRMCPSetup mySetup;
     mySetup.setPathToSetupFile(argv[1]);
     mySetup.setup();
 

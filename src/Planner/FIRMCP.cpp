@@ -698,7 +698,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
             double approxEdgeCost = computeApproxEdgeCost(currentVertex, targetVertex);
             // NOTE instead of the raw costToGo_ from FIRM, use costToGoWithApproxStabCost_ with stabilization cost compenstation along the feedback paths
             //double approxCostToGo = costToGo_[targetVertex] + approxEdgeCost;
-            double approxCostToGo = getCostToGoWithApproxStabCost(targetVertex) + approxEdgeCost;
+            double approxCostToGo = computeCostToGoForNeighbor(currentVertex, targetVertex, approxEdgeCost);
 
             // update the number of visits and cost-to-go
             currentBelief->as<FIRM::StateType>()->addThisQVvisit();                    // N(h) += 1
@@ -1003,7 +1003,7 @@ bool FIRMCP::expandQnodesOnPOMCPTreeWithApproxCostToGo(const Vertex m, const boo
                     // compute the approximate cost-to-go
                     // NOTE instead of the raw costToGo_ from FIRM, use costToGoWithApproxStabCost_ with stabilization cost compenstation along the feedback paths
                     //approxCostToGo = approxEdgeCost.getCost() + costToGo_[n];
-                    approxCostToGo = approxEdgeCost.getCost() + getCostToGoWithApproxStabCost(n);
+                    approxCostToGo = computeCostToGoForNeighbor(m, n, approxEdgeCost.getCost());
 
                     // save childQnode and approximate childQcosttogo for next POMCP-Rollout
                     stateProperty_[m]->as<FIRM::StateType>()->addChildQnode(n);
@@ -1658,6 +1658,12 @@ void FIRMCP::prunePOMCPNode(const Vertex rootVertex)
         //boost::remove_vertex(rootVertex, g_);  // remove rootVertex  // NOTE commented this to avoid confusion from vertex IDs
         //stateProperty_.erase(rootVertex);
     }
+}
+
+double FIRMCP::computeCostToGoForNeighbor(const Vertex from, const Vertex to, double edgeCost)
+{
+    // Default: FIRM global heuristic (approx edge cost + FIRM value function)
+    return edgeCost + getCostToGoWithApproxStabCost(to);
 }
 
 // for FIRM-Rollout

@@ -13,6 +13,10 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Type of build" FORCE)
 endif()
 
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-Wall -Wextra -Wpedantic -O3 -g)
+endif()
+
 message(STATUS "Building ${CMAKE_BUILD_TYPE}")
 
 #set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR})
@@ -74,6 +78,7 @@ add_library(bsp_lib
         src/ObservationModels/HeadingBeaconObservationModel.cpp
         src/Planner/FIRM.cpp
         src/Planner/FIRMCP.cpp
+        src/Planner/STLFIRMCP.cpp
         src/Planner/NBM3P.cpp
         src/Samplers/GaussianValidBeliefSampler.cpp
         src/Samplers/UniformValidBeliefSampler.cpp
@@ -116,6 +121,13 @@ target_link_libraries(bsp-app-demo
 
 add_executable(firmcp-demo src/main_firmcp.cpp)
 target_link_libraries(firmcp-demo
+        bsp_lib
+        ${FCL_LIBRARY}
+        ${CCD_LIBRARY}
+)
+
+add_executable(stl-firmcp-demo src/main_stl_firmcp.cpp)
+target_link_libraries(stl-firmcp-demo
         bsp_lib
         ${FCL_LIBRARY}
         ${CCD_LIBRARY}

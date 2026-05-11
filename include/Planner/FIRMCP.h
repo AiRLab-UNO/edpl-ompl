@@ -94,6 +94,22 @@ protected:
 
     virtual Edge generateRolloutPolicy(const Vertex currentVertex, const FIRM::Vertex goal);
 
+    /**
+     * \brief Compute the combined heuristic cost-to-go from vertex `from` toward
+     *        neighbor `to` given an already-computed edge cost.
+     *
+     * The default implementation returns the FIRM global estimate:
+     *   edgeCost + getCostToGoWithApproxStabCost(to)
+     *
+     * Derived classes (e.g., STLFIRMCP) override this to blend the FIRM
+     * estimate with an STL robustness penalty:
+     *   (1-lambda)*firmCost + lambda*(-rho*scale)
+     * where rho is the smooth robustness of the STL specification along the
+     * two-point trace [from-state, to-state].  Canonically rho > 0 means
+     * satisfaction, so -rho converts it into a cost (lower is better).
+     */
+    virtual double computeCostToGoForNeighbor(const Vertex from, const Vertex to, double edgeCost);
+
 
     /** \brief A table that stores the cost-to-go updated with approximate stabilization cost along the feedback path*/
     std::map <Vertex, double> costToGoWithApproxStabCost_;
