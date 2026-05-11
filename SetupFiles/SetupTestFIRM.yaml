@@ -1,0 +1,88 @@
+landmarks:
+  - {id: 4,  x: 1.0,   y: 7.75}
+  - {id: 15, x: 3.25,  y: 10.0}
+  - {id: 26, x: 5.5,   y: 12.25}
+  - {id: 37, x: 7.75,  y: 14.5}
+  - {id: 48, x: 10.0,  y: 16.75}
+  - {id: 59, x: 12.25, y: 19.0}
+
+observation_model:
+  type: HeadingBeacon
+  sigma_ss: 0.005
+  sigma_heading: 1.0e-6
+
+motion_model:
+  type: Omnidirectional
+  sigma_v: 0.0
+  eta_v: 0.0
+  sigma_omega: 0.0
+  eta_omega: 0.0
+  wind_noise_pos: 0.001
+  wind_noise_ang: 1.0e-6
+  min_linear_velocity: -1.0
+  max_linear_velocity: 1.0
+  max_angular_velocity: 0.6
+  dt: 0.1
+
+firm:
+  data_log:
+    save: true
+    folder: "./"
+  save_roadmap: true
+  mc_particles: 5
+  rollout_steps: 1
+  nn_radius: 2.25
+  num_nn: 10
+  dp_discount_factor: 1.0
+  dist_cost_weight: 0.1
+  connect_to_future_nodes: false
+  apply_stationary_penalty: true
+  border_belief_sampling: false
+  inf_cost_weight: 100.0
+  time_cost_weight: 0.0
+  stat_cost_inc: 1.0
+  goal_cost_to_go: 0.0
+  obstacle_cost_to_go: 20000.0
+  init_cost_to_go: 2.0
+  max_dp_iter: 1000
+  dp_convergence_threshold: 0.1
+
+firmcp:
+  num_pomcp_particles: 3
+  max_pomcp_depth: 5
+  max_firm_reach_depth: 200
+  n_sigma_for_pomcp_particle: 3.0
+  c_exploration_for_simulate: 1.0e-9
+  c_exploitation_out_of_reach: 10.0
+  c_exploitation_within_reach: 10.0
+  cost_to_go_regulator_out_of_reach: 1.0e-6
+  cost_to_go_regulator_within_reach: 1.0e-6
+  n_epsilon_for_rollout_is_reached: 3.0
+  heur_pos_step_size: 0.1
+  heur_ori_step_size: 0.05
+  heur_cov_step_size: 1.0e-5
+  cov_convergence_rate: 0.99
+  scale_stab_num_steps: 30
+  n_epsilon_for_qv_node_merging: 50.0
+  inflation_for_approx_stab_cost: 100
+
+planning_problem:
+  planner_method: 0        # 0=FIRM 1=Rollout 2=MultiModal 3=FIRMCP
+  dynamic_obstacles: false
+  environment_file: ./Models/iLQG-TRO-Task1-Pole9x9.obj
+  robot_file: ./Models/iRobot_thin.obj
+  roadmap_file: ""
+  use_roadmap: false
+  firm_nodes_min: 75
+  firm_nodes_max: 75
+  start: {x: 2.215, y: 2.215}
+  planning_time: 180.0
+  kidnapped_state: {x: 1.5, y: 19.5}
+
+goals:
+  - {x: 17.785, y: 17.785}
+
+goal_constraints:
+  mean_norm_weight: 3.0
+  cov_norm_weight: 1.0
+  reach_dist: 0.1

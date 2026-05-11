@@ -29,11 +29,10 @@ find_package(Boost REQUIRED COMPONENTS
     program_options unit_test_framework chrono)
 find_package(OMPL REQUIRED)
 find_package(Armadillo REQUIRED)
-find_package(TINYXML REQUIRED)
-
 # SQLite3
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED sqlite3)
+find_package(YAML-CPP REQUIRED)
 
 # FCL (and its transitive dependency libccd)
 find_library(FCL_LIBRARY fcl REQUIRED)
@@ -50,7 +49,7 @@ include_directories(
     ${OMPL_INCLUDE_DIRS}
     ${ARMADILLO_INCLUDE_DIRS}
     /usr/include/eigen3
-    ${TINYXML_INCLUDE_DIR}
+    ${YAML_CPP_INCLUDE_DIR}
     ${SQLITE3_INCLUDE_DIRS}
     ${FCL_INCLUDE_DIR}
     ${ASSIMP_INCLUDE_DIR}
@@ -59,7 +58,6 @@ include_directories(
 link_directories(
     ${Boost_LIBRARY_DIRS}
     ${OMPL_LIBRARY_DIRS}
-    ${TINYXML_LIBRARY_DIRS}
     ${SQLITE3_LIBRARY_DIRS}
 )
 
@@ -94,7 +92,7 @@ add_library(bsp_lib
 
 target_link_libraries(bsp_lib
     ${Boost_LIBRARIES}
-    ${TINYXML_LIBRARIES}
+    ${YAML_CPP_LIBRARIES}
     ${ARMADILLO_LIBRARIES}
     ${OMPL_LIBRARY}
     ${SQLITE3_LIBRARIES}

@@ -41,7 +41,7 @@
 #include <ompl/base/samplers/MaximizeClearanceValidStateSampler.h>
 #include <ompl/base/samplers/MinimumClearanceValidStateSampler.h>
 #include "omplapp/geometry/detail/FCLStateValidityChecker.h"
-#include <tinyxml.h>
+#include <yaml-cpp/yaml.h>
 #include "Planner/FIRM.h"
 #include "edplompl.h"
 #include "Visualization/Window.h"
@@ -359,310 +359,83 @@ protected:
 
     void loadGoals()
     {
+        YAML::Node config = YAML::LoadFile(pathToSetupFile_);
 
-        using namespace arma;
-        // Load XML containing landmarks
-        TiXmlDocument doc(pathToSetupFile_);
-        bool loadOkay = doc.LoadFile();
-
-        if(!loadOkay)
+        for (const auto& g : config["goals"])
         {
-            printf( "Could not load setup file. Error='%s'. Exiting.\n", doc.ErrorDesc() );
-
-            exit( 1 );
-        }
-
-        TiXmlNode* node = 0;
-        TiXmlElement* landmarkElement = 0;
-        TiXmlElement* itemElement = 0;
-
-        // Get the landmarklist node
-        node = doc.FirstChild( "GoalList" );
-        assert( node );
-        landmarkElement = node->ToElement(); //convert node to element
-        assert( landmarkElement  );
-
-        TiXmlNode* child = 0;
-
-        //Iterate through all the landmarks and put them into the "landmarks_" list
-        while( (child = landmarkElement ->IterateChildren(child)))
-        {
-            assert( child );
-            itemElement = child->ToElement();
-            assert( itemElement );
-
-            double goalX = 0 , goalY = 0, goalTheta = 0;
-
-            itemElement->QueryDoubleAttribute("x", &goalX);
-            itemElement->QueryDoubleAttribute("y", &goalY);
-
-            std::cout<<"Loaded Goal Pose X: "<<goalX<<" Y: "<<goalY<<std::endl;
-
+            double goalX = g["x"].as<double>();
+            double goalY = g["y"].as<double>();
+            std::cout << "Loaded Goal Pose X: " << goalX << " Y: " << goalY << std::endl;
             addGoalState(goalX, goalY);
-
         }
-
     }
 
     void loadDynamicObstaclesList()
     {
+        YAML::Node config = YAML::LoadFile(pathToSetupFile_);
 
-        // Load XML containing dynamic obstacle model paths
-        TiXmlDocument doc(pathToSetupFile_);
-        bool loadOkay = doc.LoadFile();
-
-        if(!loadOkay)
+        for (const auto& ob : config["dynamic_obstacle_list"])
         {
-            printf( "Could not load setup file. Error='%s'. Exiting.\n", doc.ErrorDesc() );
-            exit( 1 );
-        }
-
-        TiXmlNode* node = 0;
-        TiXmlElement* landmarkElement = 0;
-        TiXmlElement* itemElement = 0;
-
-        // Get the dynamic obstacle list node
-        node = doc.FirstChild( "DynamicObstacleList" );
-        assert( node );
-
-        landmarkElement = node->ToElement(); //convert node to element
-        assert( landmarkElement  );
-
-        TiXmlNode* child = 0;
-
-        //Iterate through all the obstacles and put them into a list
-        while( (child = landmarkElement ->IterateChildren(child)))
-        {
-            assert( child );
-            itemElement = child->ToElement();
-            assert( itemElement );
-
-            double id = 0;
-
-            string modelPath;
-
-            itemElement->QueryDoubleAttribute("id", &id);
-            itemElement->QueryStringAttribute("path", &modelPath);
-
-            std::cout<<"Loaded Dynamic Obstacle: "<<modelPath<<std::endl;
-
+            std::string modelPath = ob["path"].as<std::string>();
+            std::cout << "Loaded Dynamic Obstacle: " << modelPath << std::endl;
             dynObstList_.push_back(modelPath);
-
         }
-
     }
     void loadParameters()
     {
-        using namespace arma;
+        YAML::Node config = YAML::LoadFile(pathToSetupFile_);
+        const auto& pp = config["planning_problem"];
 
-        TiXmlDocument doc(pathToSetupFile_);
+        plannerMethod_   = pp["planner_method"].as<int>();
+        dynamicObstacles_ = pp["dynamic_obstacles"].as<bool>(false);
 
-        bool loadOkay = doc.LoadFile();
-
-        if ( !loadOkay )
-        {
-            printf( "Could not load setup file in planning problem. Error='%s'. Exiting.\n", doc.ErrorDesc() );
-
-            exit( 1 );
-        }
-
-        TiXmlNode* node = 0;
-
-        TiXmlElement* itemElement = 0;
-
-        node = doc.FirstChild( "PlanningProblem" );
-        assert( node );
-
-        TiXmlNode* child = 0;
-
-        // Planner Mode
-        child = node->FirstChild("PlannerMode");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        // planner method
-        int methodChoice = 0;
-        itemElement->QueryIntAttribute("method", &methodChoice);
-        plannerMethod_ = methodChoice;
-
-        //Dynamic Obstacles
-        int dynobst = 0;
-        itemElement->QueryIntAttribute("dynobst", &dynobst);
-
-        if(dynobst == 1)
-        {
-            dynamicObstacles_ = true;
+        if (dynamicObstacles_)
             loadDynamicObstaclesList();
-        }
-        else
-            dynamicObstacles_ = false;
 
-        // Read the env mesh file
-        child = node->FirstChild("Environment");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        std::string environmentFilePath;
-        itemElement->QueryStringAttribute("environmentFile", &environmentFilePath);
+        std::string environmentFilePath = pp["environment_file"].as<std::string>();
         pathToEnvironmentMesh_ = environmentFilePath;
         this->addEnvironmentMesh(environmentFilePath);
 
-        // Read the robot mesh file
-        child  = node->FirstChild("Robot");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        std::string robotFilePath;
-        itemElement->QueryStringAttribute("robotFile", &robotFilePath);
-
+        std::string robotFilePath = pp["robot_file"].as<std::string>();
         this->setRobotMesh(robotFilePath);
-       
-        // Read the roadmap filename
-        child  = node->FirstChild("RoadMap");
-        assert( child );
-        itemElement = child->ToElement();
-        assert( itemElement );
 
-        std::string tempPathStr;
-        itemElement->QueryStringAttribute("roadmapFile", &tempPathStr);
-        pathToRoadMapFile_ = tempPathStr;
+        pathToRoadMapFile_ = pp["roadmap_file"].as<std::string>("");
+        useSavedRoadMap_   = pp["use_roadmap"].as<bool>(false) ? 1 : 0;
 
-        int usermap = 0;
-        itemElement->QueryIntAttribute("useRoadMap", &usermap);
-        useSavedRoadMap_ = usermap;
-
-        // Read the start Pose
-        child  = node->FirstChild("StartPose");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        double startX = 0,startY = 0;
-
-        itemElement->QueryDoubleAttribute("x", &startX);
-        itemElement->QueryDoubleAttribute("y", &startY);
-
+        double startX = pp["start"]["x"].as<double>();
+        double startY = pp["start"]["y"].as<double>();
         setStartState(startX, startY);
 
-        // Read the Goal Pose
-        /*
-        child  = node->FirstChild("GoalPose");
-        assert( child );
+        planningTime_ = pp["planning_time"].as<double>();
+        minNodes_     = pp["firm_nodes_min"].as<int>();
+        maxNodes_     = pp["firm_nodes_max"].as<int>();
 
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        double goalX = 0 , goalY = 0, goalTheta = 0;
-
-        itemElement->QueryDoubleAttribute("x", &goalX);
-        itemElement->QueryDoubleAttribute("y", &goalY);
-        itemElement->QueryDoubleAttribute("theta", &goalTheta);
-
-        setGoalState(goalX, goalY, goalTheta);
-        */
-
-        // read planning time
-        child  = node->FirstChild("PlanningTime");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        double time = 0;
-
-        itemElement->QueryDoubleAttribute("maxTime", &time) ;
-
-        planningTime_ = time;
-
-        // read planning time
-        child  = node->FirstChild("FIRMNodes");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        int minNodeNum = 0;
-        itemElement->QueryIntAttribute("minNodes", &minNodeNum) ;
-        minNodes_ = minNodeNum;
-
-        int maxNodeNum = 0;
-        itemElement->QueryIntAttribute("maxNodes", &maxNodeNum) ;
-        maxNodes_ = maxNodeNum;
-
-        // Read Kidnapped State
-        // Read the Goal Pose
-        child  = node->FirstChild("KidnappedState");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        double kX = 0 , kY = 0;
-
-        itemElement->QueryDoubleAttribute("x", &kX);
-        itemElement->QueryDoubleAttribute("y", &kY);
-
+        double kX = pp["kidnapped_state"]["x"].as<double>();
+        double kY = pp["kidnapped_state"]["y"].as<double>();
         kidnappedState_ = siF_->allocState();
-
         kidnappedState_->as<SE2BeliefSpace::StateType>()->setXY(kX, kY);
 
         loadGoals();
 
         OMPL_INFORM("Problem configuration is");
-        std::cout<<"Path to environment mesh: "<<environmentFilePath<<std::endl;
-        std::cout<<"Path to robot mesh: "<<robotFilePath<<std::endl;
-        std::cout<<"Path to Roadmap File: "<<pathToRoadMapFile_<<std::endl;
-        std::cout<<"Start Pose X: "<<startX<<" Y: "<<startY<<std::endl;
-        std::cout<<"Planning Time: "<<planningTime_<<" seconds"<<std::endl;
-        std::cout<<"Min Nodes: "<<minNodes_<<std::endl;
-        std::cout<<"Max Nodes: "<<maxNodes_<<std::endl;
-        std::cout<<"Kidnapped Pose x:"<<kX<<" y:"<<kY<<std::endl;
+        std::cout << "Path to environment mesh: " << environmentFilePath << std::endl;
+        std::cout << "Path to robot mesh: " << robotFilePath << std::endl;
+        std::cout << "Path to Roadmap File: " << pathToRoadMapFile_ << std::endl;
+        std::cout << "Start Pose X: " << startX << " Y: " << startY << std::endl;
+        std::cout << "Planning Time: " << planningTime_ << " seconds" << std::endl;
+        std::cout << "Min Nodes: " << minNodes_ << std::endl;
+        std::cout << "Max Nodes: " << maxNodes_ << std::endl;
+        std::cout << "Kidnapped Pose x: " << kX << " y: " << kY << std::endl;
 
-
-        // Goal Constraints
-        node = doc.FirstChild( "GoalConstraints" );
-        assert( node );
-
-        // Weights
-        child = 0;
-        child = node->FirstChild("Weights");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        double meanNormWeight = 0.0;
-        itemElement->QueryDoubleAttribute("meanNormWeight", &meanNormWeight);
-        StateType::meanNormWeight_ = meanNormWeight;
-
-        double covNormWeight = 0.0;
-        itemElement->QueryDoubleAttribute("covNormWeight", &covNormWeight);
-        StateType::covNormWeight_ = covNormWeight;
-
-        // Threshold
-        child = 0;
-        child = node->FirstChild("Threshold");
-        assert( child );
-
-        itemElement = child->ToElement();
-        assert( itemElement );
-
-        double reachDist = 0.0;
-        itemElement->QueryDoubleAttribute("reachDist", &reachDist);
-        StateType::reachDist_ = reachDist;
+        const auto& gc = config["goal_constraints"];
+        StateType::meanNormWeight_ = gc["mean_norm_weight"].as<double>();
+        StateType::covNormWeight_  = gc["cov_norm_weight"].as<double>();
+        StateType::reachDist_      = gc["reach_dist"].as<double>();
 
         OMPL_INFORM("Goal Constraints are");
-        std::cout<<"meanNormWeight: "<<StateType::meanNormWeight_<<std::endl;
-        std::cout<<"covNormWeight: "<<StateType::covNormWeight_<<std::endl;
-        std::cout<<"reachDist: "<<StateType::reachDist_<<std::endl;
-
+        std::cout << "meanNormWeight: " << StateType::meanNormWeight_ << std::endl;
+        std::cout << "covNormWeight: "  << StateType::covNormWeight_ << std::endl;
+        std::cout << "reachDist: "      << StateType::reachDist_ << std::endl;
     }
 
 protected:

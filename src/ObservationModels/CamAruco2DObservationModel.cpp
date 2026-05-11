@@ -35,7 +35,7 @@
 /* Authors: Saurav Agarwal, Ali-akbar Agha-mohammadi */
 #include "Spaces/SE2BeliefSpace.h"
 #include "ObservationModels/CamAruco2DObservationModel.h"
-#include <tinyxml.h>
+#include <yaml-cpp/yaml.h>
 #include "Visualization/Visualizer.h"
 #include "Utils/FIRMUtils.h"
 
@@ -515,54 +515,22 @@ typename CamAruco2DObservationModel::ObservationType CamAruco2DObservationModel:
 
 void CamAruco2DObservationModel::loadLandmarks(const char *pathToSetupFile)
 {
-  using namespace arma;
-  // Load XML containing landmarks
-  TiXmlDocument doc(pathToSetupFile);
-  bool loadOkay = doc.LoadFile();
+    using namespace arma;
 
-  if ( !loadOkay )
-  {
-    printf( "Could not load Landmark list . Error='%s'. Exiting.\n", doc.ErrorDesc() );
+    YAML::Node config = YAML::LoadFile(pathToSetupFile);
 
-    exit( 1 );
-  }
+    for (const auto& lm : config["landmarks"])
+    {
+        ObservationType landmark(singleObservationDim);
+        landmark.zeros();
+        landmark[0] = lm["id"].as<double>();
+        landmark[1] = lm["x"].as<double>();
+        landmark[2] = lm["y"].as<double>();
+        landmark[3] = lm["theta"].as<double>(0.0);
+        this->landmarks_.push_back(landmark);
+    }
 
-  TiXmlNode* node = 0;
-  TiXmlElement* landmarkElement = 0;
-  TiXmlElement* itemElement = 0;
-
-  // Get the landmarklist node
-  node = doc.FirstChild( "LandmarkList" );
-  assert( node );
-  landmarkElement = node->ToElement(); //convert node to element
-  assert( landmarkElement  );
-
-  TiXmlNode* child = 0;
-
-  //Iterate through all the landmarks and put them into the "landmarks_" list
-  while( (child = landmarkElement ->IterateChildren(child)))
-  {
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    ObservationType landmark(singleObservationDim);
-    landmark.zeros();
-    double attributeVal;
-    itemElement->QueryDoubleAttribute("id", &attributeVal) ;
-    landmark[0] = attributeVal;
-    itemElement->QueryDoubleAttribute("x", &attributeVal) ;
-    landmark[1] = attributeVal;
-    itemElement->QueryDoubleAttribute("y", &attributeVal) ;
-    landmark[2] = attributeVal;
-    itemElement->QueryDoubleAttribute("theta", &attributeVal) ;
-    landmark[3] = attributeVal;
-
-    this->landmarks_.push_back(landmark);
-
-  }
-
-    OMPL_INFORM("CamArucoObservationModel: Total number of landmarks loaded successfully : %u", landmarks_.size() );
+    OMPL_INFORM("CamArucoObservationModel: Total number of landmarks loaded successfully : %u", landmarks_.size());
 
     Visualizer::addLandmarks(landmarks_);
 }
@@ -570,70 +538,27 @@ void CamAruco2DObservationModel::loadLandmarks(const char *pathToSetupFile)
 void CamAruco2DObservationModel::loadParameters(const char *pathToSetupFile)
 {
     using namespace arma;
-    // Load XML containing landmarks
-    TiXmlDocument doc(pathToSetupFile);
-    bool loadOkay = doc.LoadFile();
 
-    if ( !loadOkay )
-    {
-        printf( "Could not load setup file . Error='%s'. Exiting.\n", doc.ErrorDesc() );
+    YAML::Node config = YAML::LoadFile(pathToSetupFile);
+    const auto& om = config["observation_model"];
 
-        exit( 1 );
-    }
-
-    TiXmlNode* node = 0;
-
-    TiXmlElement* itemElement = 0;
-
-    // Get the landmarklist node
-    node = doc.FirstChild( "ObservationModels" );
-    assert( node );
-
-
-    TiXmlNode* child = 0;
-
-    child = node->FirstChild("CamAruco2DObservationModel");
-    //Iterate through all the landmarks and put them into the "landmarks_" list
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    double cameraRange = 0;
-    double cameraHalfFov = 0;
-    double sigmaRange=0;
-    double sigmaAngle=0;
-    double etaRD=0;
-    double etaRPhi=0;
-    double etaThetaD=0;
-    double etaThetaPhi=0;
-
-    itemElement->QueryDoubleAttribute("camera_range", &cameraRange) ;
-    itemElement->QueryDoubleAttribute("camera_half_fov", &cameraHalfFov) ;
-    itemElement->QueryDoubleAttribute("sigma_range", &sigmaRange) ;
-    itemElement->QueryDoubleAttribute("sigma_angle", &sigmaAngle) ;
-    itemElement->QueryDoubleAttribute("eta_rd", &etaRD) ;
-    itemElement->QueryDoubleAttribute("eta_rphi", &etaRPhi) ;
-    itemElement->QueryDoubleAttribute("eta_thetad", &etaThetaD) ;
-    itemElement->QueryDoubleAttribute("eta_thetaphi", &etaThetaPhi) ;
+    double cameraRange   = om["camera_range"].as<double>();
+    double cameraHalfFov = om["camera_half_fov"].as<double>();
+    double sigmaRange    = om["sigma_range"].as<double>();
+    double sigmaAngle    = om["sigma_angle"].as<double>();
+    double etaRD         = om["eta_rd"].as<double>();
+    double etaRPhi       = om["eta_rphi"].as<double>();
+    double etaThetaD     = om["eta_thetad"].as<double>();
+    double etaThetaPhi   = om["eta_thetaphi"].as<double>();
 
     this->sigma_ << sigmaRange << sigmaAngle * boost::math::constants::pi<double>() / 180.0 << endr;
-    this->etaD_  << etaRD << etaThetaD <<endr;
-    this->etaPhi_<< etaRPhi << etaThetaPhi << endr;
+    this->etaD_  << etaRD << etaThetaD << endr;
+    this->etaPhi_ << etaRPhi << etaThetaPhi << endr;
 
-    cameraRange_ = cameraRange;
+    cameraRange_   = cameraRange;
     cameraHalfFov_ = cameraHalfFov;
 
-    OMPL_INFORM("CamArucoObservationModel: sigmaRange = %f", sigmaRange );
-
-    OMPL_INFORM("CamArucoObservationModel: sigma_ = ");
-    std::cout<<sigma_<<std::endl;
-
-    OMPL_INFORM("CamArucoObservationModel: etaD_ = ");
-    std::cout<<etaD_<<std::endl;
-
-    OMPL_INFORM("CamArucoObservationModel: etaPhi = ");
-    std::cout<<etaPhi_<<std::endl;
-
+    OMPL_INFORM("CamArucoObservationModel: sigmaRange = %f", sigmaRange);
 }
 
 bool CamAruco2DObservationModel::isStateObservable(const ompl::base::State *state)

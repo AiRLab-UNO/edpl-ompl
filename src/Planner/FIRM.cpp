@@ -45,7 +45,7 @@
 #include <boost/graph/incremental_components.hpp>
 #include <boost/property_map/vector_property_map.hpp>
 #include <boost/thread.hpp>
-#include <tinyxml.h>
+#include <yaml-cpp/yaml.h>
 #include <boost/heap/fibonacci_heap.hpp>
 #include <boost/circular_buffer.hpp>
 #include "Visualization/Visualizer.h"
@@ -3007,7 +3007,7 @@ void FIRM::savePlannerData()
 
     }
 
-    FIRMUtils::writeFIRMGraphToXML(nodes, edgeWeights, logFilePath_);
+    FIRMUtils::writeFIRMGraphToYAML(nodes, edgeWeights, logFilePath_);
 
 }
 
@@ -3137,7 +3137,7 @@ void FIRM::loadRoadMapFromFile(const std::string &pathToFile)
 
     boost::mutex::scoped_lock _(graphMutex_);
 
-    if(FIRMUtils::readFIRMGraphFromXML(pathToFile,  FIRMNodePosList, FIRMNodeCovarianceList , loadedEdgeProperties_))
+    if(FIRMUtils::readFIRMGraphFromYAML(pathToFile,  FIRMNodePosList, FIRMNodeCovarianceList , loadedEdgeProperties_))
     {
 
         loadedRoadmapFromFile_ = true;
@@ -3317,225 +3317,50 @@ void FIRM::writeTimeSeriesDataToFile(std::string /*fname*/, std::string dataName
 
 void FIRM::loadParametersFromFile(const std::string &pathToFile)
 {
-   TiXmlDocument doc(pathToFile);
+    YAML::Node config = YAML::LoadFile(pathToFile);
+    const auto& f = config["firm"];
 
-    bool loadOkay = doc.LoadFile();
+    const auto& dl = f["data_log"];
+    bool saveLog = dl["save"].as<bool>();
+    std::string logpath = dl["folder"].as<std::string>();
 
-    if( !loadOkay )
-    {
-        printf( "FIRM: Could not load setup file. Error='%s'. Exiting.\n", doc.ErrorDesc() );
-
-        exit( 1 );
-    }
-
-    TiXmlNode* node = 0;
-
-    TiXmlElement* itemElement = 0;
-
-    node = doc.FirstChild( "FIRM" );
-    assert( node );
-
-    TiXmlNode* child = 0;
-
-    // Video
-    child = node->FirstChild("Video");
-    assert( child );
-
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    int saveVideo = 0;
-    itemElement->QueryIntAttribute("save", &saveVideo);
-//     if(saveVideo == 1) doSaveLogs_ = true;
-    if(saveVideo == 1) doSaveVideo_ = true;
-
-    // Logging
-    child = node->FirstChild("DataLog");
-    assert( child );
-
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    std::string logpath;
-    itemElement->QueryStringAttribute("folder", &logpath);
     logFilePath_ = logpath;
 
     namespace pt = boost::posix_time;
-
     pt::ptime now = pt::second_clock::local_time();
-
-    std::string timeStamp(to_iso_string(now)) ;
-
-    logFilePath_ = logFilePath_ + "run-" + timeStamp ;
-
+    std::string timeStamp(to_iso_string(now));
+    logFilePath_ = logFilePath_ + "run-" + timeStamp;
     boost::filesystem::path dir(logFilePath_);
-
     logFilePath_ = logFilePath_ + "/";
 
-    int saveLog = 0;
-    itemElement->QueryIntAttribute("save", &saveLog);
-    if(saveLog==1)
+    if (saveLog)
     {
         doSaveLogs_ = true;
         boost::filesystem::create_directory(dir);
     }
     else
     {
-       doSaveLogs_ = false;
+        doSaveLogs_ = false;
     }
 
-    // Roadmap output
-    child = node->FirstChild("Roadmap");
-    assert( child );
-
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    int saveRoadmap = 0;
-    itemElement->QueryIntAttribute("save", &saveRoadmap);
-
-    if(saveRoadmap == 1)
-    {
-        doSavePlannerData_ = true;
-    }
-    else
-    {
-        doSavePlannerData_ = false;
-    }
-
-    // Monte carlo parameters
-    child = node->FirstChild("MCParticles");
-    assert( child );
-
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    int numP = 0;
-    itemElement->QueryIntAttribute("numparticles", &numP);
-    numMCParticles_ = numP;
-
-   
-    // Rollout steps
-    child = node->FirstChild("RolloutSteps");
-    assert( child );
-
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    int rolloutSteps = 0;
-    itemElement->QueryIntAttribute("rolloutsteps", &rolloutSteps);
-    rolloutSteps_ = rolloutSteps;
-
-    // Nearest neighbor radius
-    child = node->FirstChild("NNRadius");
-    assert( child );
-
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    double nnradius = 0.0;
-    itemElement->QueryDoubleAttribute("nnradius", &nnradius);
-    NNRadius_ = nnradius;
-
-    // Nearest neighbors num
-    child = node->FirstChild("NumNN");
-    assert( child );
-
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    int numnn = 0;
-    itemElement->QueryIntAttribute("numnn", &numnn);
-    numNearestNeighbors_ = numnn;
-
-    // DP params
-    double discountFactorDP = 0.0, informationCostWeight = 0.0, timeCostWeight = 0.0, statCostIncrement = 0.0, distanceCostWeight = 0.0, goalCostToGo = 0.0, obstacleCostToGo = 0.0, initialCostToGo = 0.0, convergenceThresholdDP = 0.0;
-    int maxDPIterations = 0;
-
-    child = node->FirstChild("DPDiscountFactor");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("discountfac", &discountFactorDP);
-    discountFactorDP_ = discountFactorDP;
-
-    child = node->FirstChild("DistCostWeight");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("distcostw", &distanceCostWeight);
-    distanceCostWeight_ = distanceCostWeight;
-
-
-    int connectToFutureNodes = 0, applyStationaryPenalty = 0, borderBeliefSampling = 0;
-    child = node->FirstChild("StabilizationHack");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryIntAttribute("connectToFutureNodes", &connectToFutureNodes);
-    itemElement->QueryIntAttribute("applyStationaryPenalty", &applyStationaryPenalty);
-    itemElement->QueryIntAttribute("borderBeliefSampling", &borderBeliefSampling);
-    connectToFutureNodes_ = (bool)connectToFutureNodes;
-    applyStationaryPenalty_ = (bool)applyStationaryPenalty;
-    borderBeliefSampling_ = (bool)borderBeliefSampling;
-
-
-    child = node->FirstChild("InfCostWeight");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("infcostw", &informationCostWeight);
-    informationCostWeight_ = informationCostWeight;
-
-    child = node->FirstChild("TimeCostWeight");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("timecostw", &timeCostWeight);
-    timeCostWeight_ = timeCostWeight;
-
-    child = node->FirstChild("StatCostInc");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("statcostinc", &statCostIncrement);
-    statCostIncrement_ = statCostIncrement;
-
-
-    child = node->FirstChild("GoalCostToGo");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("goalctg", &goalCostToGo);
-    goalCostToGo_ = goalCostToGo;
-
-    child = node->FirstChild("ObstCostToGo");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("obsctg", &obstacleCostToGo);
-    obstacleCostToGo_ = obstacleCostToGo;
-
-    child = node->FirstChild("InitCostToGo");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("initctg", &initialCostToGo);
-    initialCostToGo_ = initialCostToGo;
-
-    child = node->FirstChild("DPConvergenceThreshold");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("dpconvthresh", &convergenceThresholdDP);
-    convergenceThresholdDP_ = convergenceThresholdDP;
-
-    child = node->FirstChild("MaxDPIter");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryIntAttribute("dpiter", &maxDPIterations);
-    maxDPIterations_ = maxDPIterations;
+    doSavePlannerData_    = f["save_roadmap"].as<bool>();
+    numMCParticles_       = f["mc_particles"].as<int>();
+    rolloutSteps_         = f["rollout_steps"].as<int>();
+    NNRadius_             = f["nn_radius"].as<double>();
+    numNearestNeighbors_  = f["num_nn"].as<int>();
+    discountFactorDP_     = f["dp_discount_factor"].as<double>();
+    distanceCostWeight_   = f["dist_cost_weight"].as<double>();
+    connectToFutureNodes_ = f["connect_to_future_nodes"].as<bool>();
+    applyStationaryPenalty_ = f["apply_stationary_penalty"].as<bool>();
+    borderBeliefSampling_ = f["border_belief_sampling"].as<bool>();
+    informationCostWeight_ = f["inf_cost_weight"].as<double>();
+    timeCostWeight_       = f["time_cost_weight"].as<double>();
+    statCostIncrement_    = f["stat_cost_inc"].as<double>();
+    goalCostToGo_         = f["goal_cost_to_go"].as<double>();
+    obstacleCostToGo_     = f["obstacle_cost_to_go"].as<double>();
+    initialCostToGo_      = f["init_cost_to_go"].as<double>();
+    maxDPIterations_      = f["max_dp_iter"].as<int>();
+    convergenceThresholdDP_ = f["dp_convergence_threshold"].as<double>();
 
     OMPL_INFORM("FIRM: NNRadius = %f", NNRadius_);
 }

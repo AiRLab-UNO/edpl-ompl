@@ -35,7 +35,7 @@
 /* Authors:  Saurav Agarwal, Ali-akbar Agha-mohammadi */
 
 
-#include <tinyxml.h>
+#include <yaml-cpp/yaml.h>
 #include "Spaces/SE2BeliefSpace.h"
 #include "MotionModels/OmnidirectionalMotionModel.h"
 #include "Utils/FIRMUtils.h"
@@ -343,57 +343,25 @@ void OmnidirectionalMotionModel::loadParameters(const char *pathToSetupFile)
 {
     using namespace arma;
 
-    TiXmlDocument doc(pathToSetupFile);
-    bool loadOkay = doc.LoadFile();
+    YAML::Node config = YAML::LoadFile(pathToSetupFile);
+    const auto& mm = config["motion_model"];
 
-    if ( !loadOkay )
-    {
-        printf( "Could not load setup file in motion model. Error='%s'. Exiting.\n", doc.ErrorDesc() );
+    double sigmaV           = mm["sigma_v"].as<double>();
+    double etaV             = mm["eta_v"].as<double>();
+    double sigmaOmega       = mm["sigma_omega"].as<double>();
+    double etaOmega         = mm["eta_omega"].as<double>();
+    double windNoisePos     = mm["wind_noise_pos"].as<double>();
+    double windNoiseAng     = mm["wind_noise_ang"].as<double>();
+    double minLinearVelocity = mm["min_linear_velocity"].as<double>();
+    double maxLinearVelocity = mm["max_linear_velocity"].as<double>();
+    double maxAngularVelocity = mm["max_angular_velocity"].as<double>();
+    double dt               = mm["dt"].as<double>();
 
-        exit( 1 );
-    }
-
-    TiXmlNode* node = 0;
-    TiXmlElement* itemElement = 0;
-
-    node = doc.FirstChild( "MotionModels" );
-    assert( node );
-
-    TiXmlNode* child = 0;
-
-    child = node->FirstChild("OmnidirectionalMotionModel");
-
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    double sigmaV=0;
-    double etaV = 0;
-    double sigmaOmega=0;
-    double etaOmega=0;
-    double windNoisePos=0;
-    double windNoiseAng = 0;
-    double minLinearVelocity=0;
-    double maxLinearVelocity=0;
-    double maxAngularVelocity =0;
-    double dt = 0;
-
-    itemElement->QueryDoubleAttribute("sigmaV", &sigmaV) ;
-    itemElement->QueryDoubleAttribute("etaV", &etaV) ;
-    itemElement->QueryDoubleAttribute("sigmaOmega", &sigmaOmega) ;
-    itemElement->QueryDoubleAttribute("etaOmega", &etaOmega) ;
-    itemElement->QueryDoubleAttribute("wind_noise_pos", &windNoisePos) ;
-    itemElement->QueryDoubleAttribute("wind_noise_ang", &windNoiseAng) ;
-    itemElement->QueryDoubleAttribute("min_linear_velocity", &minLinearVelocity) ;
-    itemElement->QueryDoubleAttribute("max_linear_velocity", &maxLinearVelocity) ;
-    itemElement->QueryDoubleAttribute("max_angular_velocity", &maxAngularVelocity) ;
-    itemElement->QueryDoubleAttribute("dt", &dt) ;
-
-    this->sigma_ << sigmaV << sigmaV << sigmaOmega <<endr;
-    this->eta_  << etaV << etaV << etaOmega << endr;
+    this->sigma_ << sigmaV << sigmaV << sigmaOmega << endr;
+    this->eta_   << etaV   << etaV   << etaOmega   << endr;
 
     rowvec Wg_root_vec(3);
-    Wg_root_vec << windNoisePos << windNoisePos << windNoiseAng*boost::math::constants::pi<double>() / 180.0 << endr;
+    Wg_root_vec << windNoisePos << windNoisePos << windNoiseAng * boost::math::constants::pi<double>() / 180.0 << endr;
     P_Wg_ = diagmat(square(Wg_root_vec));
 
     minLinearVelocity_  = minLinearVelocity;
@@ -401,21 +369,6 @@ void OmnidirectionalMotionModel::loadParameters(const char *pathToSetupFile)
     maxAngularVelocity_ = maxAngularVelocity;
     dt_                 = dt;
 
-    OMPL_INFORM("OmnidirectionalMotionModel: sigma_ = ");
-    std::cout<<sigma_<<std::endl;
-
-    OMPL_INFORM("OmnidirectionalMotionModel: eta_ = ");
-    std::cout<<eta_<<std::endl;
-
-    OMPL_INFORM("OmnidirectionalMotionModel: P_Wg_ = ");
-    std::cout<<P_Wg_<<std::endl;
-
-    OMPL_INFORM("OmnidirectionalMotionModel: min Linear Velocity (m/s)    = %f", minLinearVelocity_ );
-
-    OMPL_INFORM("OmnidirectionalMotionModel: max Linear Velocity (m/s)    = %f", maxLinearVelocity_);
-
-    OMPL_INFORM("OmnidirectionalMotionModel: max Angular Velocity (rad/s) = %f",maxAngularVelocity_);
-
-    OMPL_INFORM("OmnidirectionalMotionModel: Timestep (seconds) = %f", dt_);
-
+    OMPL_INFORM("OmnidirectionalMotionModel: min/max linear vel = %f / %f, max angular vel = %f, dt = %f",
+        minLinearVelocity_, maxLinearVelocity_, maxAngularVelocity_, dt_);
 }

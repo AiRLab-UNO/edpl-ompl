@@ -38,7 +38,8 @@
 #include <boost/date_time.hpp>
 #include <utility>
 #include <random>
-#include <tinyxml.h>
+#include <fstream>
+#include <yaml-cpp/yaml.h>
 
 
 void FIRMUtils::normalizeAngleToPiRange(double &theta)
@@ -80,191 +81,92 @@ int FIRMUtils::generateRandomIntegerInRange(const int floor, const int ceiling)
     return r;
 }
 
-void FIRMUtils::writeFIRMGraphToXML(const std::vector<std::pair<int,std::pair<arma::colvec,arma::mat> > > nodes, const std::vector<std::pair<std::pair<int,int>,FIRMWeight> > edgeWeights, const std::string &outputPath)
+void FIRMUtils::writeFIRMGraphToYAML(const std::vector<std::pair<int,std::pair<arma::colvec,arma::mat> > > nodes, const std::vector<std::pair<std::pair<int,int>,FIRMWeight> > edgeWeights, const std::string &outputPath)
 {
-    TiXmlDocument doc;
+    YAML::Emitter out;
+    out << YAML::BeginMap;
 
- 	TiXmlDeclaration* decl = new TiXmlDeclaration( "1.0", "", "" );
-	doc.LinkEndChild( decl );
+    out << YAML::Key << "nodes" << YAML::Value << YAML::BeginSeq;
+    for (int i = 0; i < (int)nodes.size(); i++)
+    {
+        int nodeID        = nodes[i].first;
+        arma::colvec xVec = nodes[i].second.first;
+        arma::mat cov     = nodes[i].second.second;
 
-	TiXmlElement * Nodes = new TiXmlElement( "Nodes" );
-	doc.LinkEndChild( Nodes );
+        out << YAML::BeginMap;
+        out << YAML::Key << "id"    << YAML::Value << nodeID;
+        out << YAML::Key << "x"     << YAML::Value << xVec(0);
+        out << YAML::Key << "y"     << YAML::Value << xVec(1);
+        out << YAML::Key << "theta" << YAML::Value << xVec(2);
+        out << YAML::Key << "cov" << YAML::Value << YAML::Flow
+            << YAML::BeginSeq
+            << cov(0,0) << cov(0,1) << cov(0,2)
+            << cov(1,0) << cov(1,1) << cov(1,2)
+            << cov(2,0) << cov(2,1) << cov(2,2)
+            << YAML::EndSeq;
+        out << YAML::EndMap;
+    }
+    out << YAML::EndSeq;
 
-
-	for(int i = 0; i < nodes.size(); i++)
-	{
-        TiXmlElement * node;
-        node = new TiXmlElement( "node" );
-        Nodes->LinkEndChild( node );
-
-        int nodeID = nodes[i].first; // id of the node in the graph
-
-        arma::colvec xVec = nodes[i].second.first; // x,y,yaw
-
-        arma::mat cov = nodes[i].second.second; // covariance matrix
-
-        node->SetAttribute("id", nodeID);
-        node->SetDoubleAttribute("x", xVec(0));
-        node->SetDoubleAttribute("y", xVec(1));
-        node->SetDoubleAttribute("theta",xVec(2));
-        node->SetDoubleAttribute("c11", cov(0,0));
-        node->SetDoubleAttribute("c12", cov(0,1));
-        node->SetDoubleAttribute("c13", cov(0,2));
-        node->SetDoubleAttribute("c21", cov(1,0));
-        node->SetDoubleAttribute("c22", cov(1,1));
-        node->SetDoubleAttribute("c23", cov(1,2));
-        node->SetDoubleAttribute("c31", cov(2,0));
-        node->SetDoubleAttribute("c32", cov(2,1));
-        node->SetDoubleAttribute("c33", cov(2,2));
-
-   }
-
-    TiXmlElement * Edges = new TiXmlElement( "Edges" );
-	doc.LinkEndChild( Edges );
-
-	for(int i = 0; i < edgeWeights.size(); i++)
-	{
-        TiXmlElement * edge;
-        edge = new TiXmlElement( "edge" );
-        Edges->LinkEndChild( edge );
-
+    out << YAML::Key << "edges" << YAML::Value << YAML::BeginSeq;
+    for (int i = 0; i < (int)edgeWeights.size(); i++)
+    {
         FIRMWeight w = edgeWeights[i].second;
+        out << YAML::BeginMap;
+        out << YAML::Key << "start" << YAML::Value << edgeWeights[i].first.first;
+        out << YAML::Key << "end"   << YAML::Value << edgeWeights[i].first.second;
+        out << YAML::Key << "success_prob" << YAML::Value << w.getSuccessProbability();
+        out << YAML::Key << "cost"         << YAML::Value << w.getCost();
+        out << YAML::EndMap;
+    }
+    out << YAML::EndSeq;
+    out << YAML::EndMap;
 
-
-        edge->SetAttribute("startVertexID", edgeWeights[i].first.first);
-        edge->SetAttribute("endVertexID", edgeWeights[i].first.second);
-        edge->SetDoubleAttribute("successProb", w.getSuccessProbability());
-        edge->SetDoubleAttribute("cost", w.getCost());
-
-
-   }
-
-   // Generate time stamp for saving roadmap
     namespace pt = boost::posix_time;
-
     pt::ptime now = pt::second_clock::local_time();
+    std::string timeStamp(to_iso_string(now));
+    std::string roadmapFileName = outputPath + "FIRMRoadMap-" + timeStamp + ".yaml";
 
-    std::string timeStamp(to_iso_string(now)) ;
-
-    std::string roadmapFileName = outputPath + "FIRMRoadMap-" + timeStamp + ".xml";
-
-	doc.SaveFile(roadmapFileName);
+    std::ofstream fout(roadmapFileName);
+    fout << out.c_str();
 }
 
-bool FIRMUtils::readFIRMGraphFromXML(const std::string &pathToXML, std::vector<std::pair<int, arma::colvec> > &FIRMNodePosList, std::vector<std::pair<int, arma::mat> > &FIRMNodeCovarianceList, std::vector<std::pair<std::pair<int,int>,FIRMWeight> > &edgeWeights)
+bool FIRMUtils::readFIRMGraphFromYAML(const std::string &pathToYAML, std::vector<std::pair<int, arma::colvec> > &FIRMNodePosList, std::vector<std::pair<int, arma::mat> > &FIRMNodeCovarianceList, std::vector<std::pair<std::pair<int,int>,FIRMWeight> > &edgeWeights)
 {
-
-    TiXmlDocument doc(pathToXML);
-
-    bool loadOkay = doc.LoadFile();
-
-    if ( !loadOkay )
-    {
-        OMPL_INFORM("FIRMUtils: Could not load Graph from XML . Need to construct graph.");
+    YAML::Node doc;
+    try {
+        doc = YAML::LoadFile(pathToYAML);
+    } catch (const YAML::Exception&) {
+        OMPL_INFORM("FIRMUtils: Could not load Graph from YAML. Need to construct graph.");
         return false;
     }
 
-    TiXmlNode* NodeList = 0;
-
-    TiXmlElement* nodeElement = 0;
-
-    TiXmlElement* itemElement = 0;
-
-    NodeList = doc.FirstChild( "Nodes" );
-
-    assert( NodeList );
-
-    nodeElement = NodeList->ToElement(); //convert NodeList to element
-
-    assert( nodeElement  );
-
-    TiXmlNode* child = 0;
-
-    while( (child = nodeElement->IterateChildren(child)))
+    for (const auto& n : doc["nodes"])
     {
-        assert( child );
-
-        itemElement = child->ToElement();
-
-        assert( itemElement );
-
-        double x = 0, y = 0, theta = 0, c11 = 0, c12 = 0, c13 = 0, c21 = 0, c22 = 0, c23 = 0, c31 = 0, c32 = 0, c33 = 0;
-        int id = 0;
-
-        itemElement->QueryIntAttribute("id", &id) ;
-        itemElement->QueryDoubleAttribute("x", &x) ;
-        itemElement->QueryDoubleAttribute("y", &y) ;
-        itemElement->QueryDoubleAttribute("theta", &theta) ;
-        itemElement->QueryDoubleAttribute("c11", &c11) ;
-        itemElement->QueryDoubleAttribute("c12", &c12) ;
-        itemElement->QueryDoubleAttribute("c13", &c13) ;
-        itemElement->QueryDoubleAttribute("c21", &c21) ;
-        itemElement->QueryDoubleAttribute("c22", &c22) ;
-        itemElement->QueryDoubleAttribute("c23", &c23) ;
-        itemElement->QueryDoubleAttribute("c31", &c31) ;
-        itemElement->QueryDoubleAttribute("c32", &c32) ;
-        itemElement->QueryDoubleAttribute("c33", &c33) ;
-
+        int id = n["id"].as<int>();
         arma::colvec xVec(3);
+        xVec(0) = n["x"].as<double>();
+        xVec(1) = n["y"].as<double>();
+        xVec(2) = n["theta"].as<double>();
+
+        auto covSeq = n["cov"];
         arma::mat cov(3,3);
+        cov(0,0) = covSeq[0].as<double>(); cov(0,1) = covSeq[1].as<double>(); cov(0,2) = covSeq[2].as<double>();
+        cov(1,0) = covSeq[3].as<double>(); cov(1,1) = covSeq[4].as<double>(); cov(1,2) = covSeq[5].as<double>();
+        cov(2,0) = covSeq[6].as<double>(); cov(2,1) = covSeq[7].as<double>(); cov(2,2) = covSeq[8].as<double>();
 
-        xVec(0) = x;
-        xVec(1) = y;
-        xVec(2) = theta;
-
-        cov(0,0) = c11;
-        cov(0,1) = c12;
-        cov(0,2) = c13;
-        cov(1,0) = c21;
-        cov(1,1) = c22;
-        cov(1,2) = c23;
-        cov(2,0) = c31;
-        cov(2,1) = c32;
-        cov(2,2) = c33;
-
-        FIRMNodePosList.push_back(std::make_pair(id,xVec));
-        FIRMNodeCovarianceList.push_back(std::make_pair(id,cov));
-
+        FIRMNodePosList.push_back(std::make_pair(id, xVec));
+        FIRMNodeCovarianceList.push_back(std::make_pair(id, cov));
     }
 
-
-    //////////////////////
-    TiXmlNode* edgeList = 0;
-
-    TiXmlElement* edgeElement = 0;
-
-    TiXmlElement* itemElement2 = 0;
-
-    edgeList = doc.FirstChild( "Edges" );
-
-    assert( edgeList );
-
-    edgeElement = edgeList->ToElement(); //convert NodeList to element
-
-    assert( edgeElement  );
-
-    TiXmlNode* child2 = 0;
-
-    while( (child2 = edgeElement->IterateChildren(child2)))
+    for (const auto& e : doc["edges"])
     {
-        assert( child2 );
-
-        itemElement2 = child2->ToElement();
-
-        assert( itemElement2 );
-
-        int startVertexID = 0, endVertexID = 0;
-        double successProb = 0, cost = 0;
-
-        itemElement2->QueryIntAttribute("startVertexID", &startVertexID) ;
-        itemElement2->QueryIntAttribute("endVertexID", &endVertexID) ;
-        itemElement2->QueryDoubleAttribute("successProb", &successProb) ;
-        itemElement2->QueryDoubleAttribute("cost", &cost) ;
-
-        FIRMWeight w(cost, successProb);
-
-        edgeWeights.push_back(std::make_pair(std::make_pair(startVertexID, endVertexID),w));
-
+        int start       = e["start"].as<int>();
+        int end         = e["end"].as<int>();
+        double succProb = e["success_prob"].as<double>();
+        double cost     = e["cost"].as<double>();
+        FIRMWeight w(cost, succProb);
+        edgeWeights.push_back(std::make_pair(std::make_pair(start, end), w));
     }
 
     return true;

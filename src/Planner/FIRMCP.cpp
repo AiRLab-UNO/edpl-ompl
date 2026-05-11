@@ -37,7 +37,7 @@
 #include "Planner/FIRMCP.h"
 #include "Visualization/Visualizer.h"
 #include <boost/circular_buffer.hpp>
-#include <tinyxml.h>
+#include <yaml-cpp/yaml.h>
 
 #define foreach BOOST_FOREACH
 #define foreach_reverse BOOST_REVERSE_FOREACH
@@ -53,145 +53,28 @@ FIRMCP::~FIRMCP(void)
 
 void FIRMCP::loadParametersFromFile(const std::string &pathToFile)
 {
-    // load parameters for FIRM
     FIRM::loadParametersFromFile(pathToFile);
 
+    YAML::Node config = YAML::LoadFile(pathToFile);
+    const auto& fc = config["firmcp"];
 
-    // load parameters for FIRMCP
-    TiXmlDocument doc(pathToFile);
-    bool loadOkay = doc.LoadFile();
-    if( !loadOkay )
-    {
-        printf( "FIRMCP: Could not load setup file. Error='%s'. Exiting.\n", doc.ErrorDesc() );
-        exit( 1 );
-    }
-
-    TiXmlNode* node = 0;
-    TiXmlNode* child = 0;
-    TiXmlElement* itemElement = 0;
-
-    node = doc.FirstChild( "FIRMCP" );
-    assert( node );
-
-
-    child = node->FirstChild("numPOMCPParticles");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryIntAttribute("numPOMCPParticles", &numPOMCPParticles_);
-    itemElement = 0;
-
-    child = node->FirstChild("maxPOMCPDepth");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryIntAttribute("maxPOMCPDepth", &maxPOMCPDepth_);
-    itemElement = 0;
-
-    child = node->FirstChild("maxFIRMReachDepth");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryIntAttribute("maxFIRMReachDepth", &maxFIRMReachDepth_);
-    itemElement = 0;
-
-    child = node->FirstChild("nSigmaForPOMCPParticle");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("nSigmaForPOMCPParticle", &nSigmaForPOMCPParticle_);
-    itemElement = 0;
-
-    child = node->FirstChild("cExplorationForSimulate");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("cExplorationForSimulate", &cExplorationForSimulate_);
-    itemElement = 0;
-
-    child = node->FirstChild("cExploitationForRolloutOutOfReach");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("cExploitationForRolloutOutOfReach", &cExploitationForRolloutOutOfReach_);
-    itemElement = 0;
-
-    child = node->FirstChild("cExploitationForRolloutWithinReach");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("cExploitationForRolloutWithinReach", &cExploitationForRolloutWithinReach_);
-    itemElement = 0;
-
-    child = node->FirstChild("costToGoRegulatorOutOfReach");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("costToGoRegulatorOutOfReach", &costToGoRegulatorOutOfReach_);
-    itemElement = 0;
-
-    child = node->FirstChild("costToGoRegulatorWithinReach");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("costToGoRegulatorWithinReach", &costToGoRegulatorWithinReach_);
-    itemElement = 0;
-
-    child = node->FirstChild("nEpsilonForRolloutIsReached");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("nEpsilonForRolloutIsReached", &nEpsilonForRolloutIsReached_);
-    itemElement = 0;
-
-    child = node->FirstChild("heurPosStepSize");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("heurPosStepSize", &heurPosStepSize_);
-    itemElement = 0;
-
-    child = node->FirstChild("heurOriStepSize");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("heurOriStepSize", &heurOriStepSize_);
-    itemElement = 0;
-
-    child = node->FirstChild("heurCovStepSize");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("heurCovStepSize", &heurCovStepSize_);
-    itemElement = 0;
-
-    child = node->FirstChild("covConvergenceRate");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("covConvergenceRate", &covConvergenceRate_);
-    itemElement = 0;
-
-    child = node->FirstChild("scaleStabNumSteps");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryIntAttribute("scaleStabNumSteps", &scaleStabNumSteps_);
-    itemElement = 0;
-
-    child = node->FirstChild("nEpsilonForQVnodeMerging");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryDoubleAttribute("nEpsilonForQVnodeMerging", &nEpsilonForQVnodeMerging_);
-    itemElement = 0;
-
-    child = node->FirstChild("inflationForApproxStabCost");
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-    itemElement->QueryIntAttribute("inflationForApproxStabCost", &inflationForApproxStabCost_);
-    itemElement = 0;
+    numPOMCPParticles_                 = fc["num_pomcp_particles"].as<int>();
+    maxPOMCPDepth_                     = fc["max_pomcp_depth"].as<int>();
+    maxFIRMReachDepth_                 = fc["max_firm_reach_depth"].as<int>();
+    nSigmaForPOMCPParticle_            = fc["n_sigma_for_pomcp_particle"].as<double>();
+    cExplorationForSimulate_           = fc["c_exploration_for_simulate"].as<double>();
+    cExploitationForRolloutOutOfReach_ = fc["c_exploitation_out_of_reach"].as<double>();
+    cExploitationForRolloutWithinReach_ = fc["c_exploitation_within_reach"].as<double>();
+    costToGoRegulatorOutOfReach_       = fc["cost_to_go_regulator_out_of_reach"].as<double>();
+    costToGoRegulatorWithinReach_      = fc["cost_to_go_regulator_within_reach"].as<double>();
+    nEpsilonForRolloutIsReached_       = fc["n_epsilon_for_rollout_is_reached"].as<double>();
+    heurPosStepSize_                   = fc["heur_pos_step_size"].as<double>();
+    heurOriStepSize_                   = fc["heur_ori_step_size"].as<double>();
+    heurCovStepSize_                   = fc["heur_cov_step_size"].as<double>();
+    covConvergenceRate_                = fc["cov_convergence_rate"].as<double>();
+    scaleStabNumSteps_                 = fc["scale_stab_num_steps"].as<int>();
+    nEpsilonForQVnodeMerging_          = fc["n_epsilon_for_qv_node_merging"].as<double>();
+    inflationForApproxStabCost_        = fc["inflation_for_approx_stab_cost"].as<int>();
 }
 
 void FIRMCP::executeFeedbackWithPOMCP(void)

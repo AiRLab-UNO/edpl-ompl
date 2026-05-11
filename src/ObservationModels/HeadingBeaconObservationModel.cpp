@@ -36,7 +36,7 @@
 
 #include "Spaces/SE2BeliefSpace.h"
 #include "ObservationModels/HeadingBeaconObservationModel.h"
-#include <tinyxml.h>
+#include <yaml-cpp/yaml.h>
 #include "Visualization/Visualizer.h"
 #include "Utils/FIRMUtils.h"
 
@@ -228,103 +228,37 @@ bool HeadingBeaconObservationModel::isStateObservable(const ompl::base::State *s
 
 void HeadingBeaconObservationModel::loadLandmarks(const char *pathToSetupFile)
 {
+    using namespace arma;
 
-	using namespace arma;
-	// Load XML containing landmarks
-	TiXmlDocument doc(pathToSetupFile);
-	bool loadOkay = doc.LoadFile();
+    YAML::Node config = YAML::LoadFile(pathToSetupFile);
 
-	if (!loadOkay)
-	{
-		printf( "Could not load Landmark list . Error='%s'. Exiting.\n", doc.ErrorDesc() );
+    for (const auto& lm : config["landmarks"])
+    {
+        ObservationType landmark(3);
+        landmark[0] = lm["id"].as<double>();
+        landmark[1] = lm["x"].as<double>();
+        landmark[2] = lm["y"].as<double>();
+        this->landmarks_.push_back(landmark);
+    }
 
-		exit( 1 );
-	}
+    OMPL_INFORM("HeadingBeaconObservationModel: Total number of landmarks loaded successfully : %u", landmarks_.size());
 
-	TiXmlNode* node = 0;
-	TiXmlElement* landmarkElement = 0;
-	TiXmlElement* itemElement = 0;
-
-	// Get the landmarklist node
-	node = doc.FirstChild( "LandmarkList" );
-	assert( node );
-	landmarkElement = node->ToElement(); //convert node to element
-	assert( landmarkElement  );
-
-	TiXmlNode* child = 0;
-
-	//Iterate through all the landmarks and put them into the "landmarks_" list
-	while( (child = landmarkElement ->IterateChildren(child)))
-	{
-		assert( child );
-		itemElement = child->ToElement();
-		assert( itemElement );
-
-		ObservationType landmark(3);
-		landmark.zeros();
-		double attributeVal;
-		itemElement->QueryDoubleAttribute("id", &attributeVal) ;
-		landmark[0] = attributeVal;
-		itemElement->QueryDoubleAttribute("x", &attributeVal) ;
-		landmark[1] = attributeVal;
-		itemElement->QueryDoubleAttribute("y", &attributeVal) ;
-		landmark[2] = attributeVal;
-
-		this->landmarks_.push_back(landmark);
-	}
-
-	OMPL_INFORM("HeadingBeaconObservationModel: Total number of landmarks loaded successfully : %u", landmarks_.size() );
-
-	Visualizer::addLandmarks(landmarks_);
+    Visualizer::addLandmarks(landmarks_);
 }
 
 void HeadingBeaconObservationModel::loadParameters(const char *pathToSetupFile)
 {
+    using namespace arma;
 
-	using namespace arma;
-    // Load XML containing landmarks
-    TiXmlDocument doc(pathToSetupFile);
-    bool loadOkay = doc.LoadFile();
+    YAML::Node config = YAML::LoadFile(pathToSetupFile);
+    const auto& om = config["observation_model"];
 
-    if ( !loadOkay )
-    {
-        printf( "Could not load setup file . Error='%s'. Exiting.\n", doc.ErrorDesc() );
-
-        exit( 1 );
-    }
-
-    TiXmlNode* node = 0;
-
-    TiXmlElement* itemElement = 0;
-
-    // Get the landmarklist node
-    node = doc.FirstChild( "ObservationModels" );
-    assert( node );
-
-
-    TiXmlNode* child = 0;
-
-    child = node->FirstChild("HeadingBeaconObservationModel");
-    
-    //Iterate through all the landmarks and put them into the "landmarks_" list
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    double sigma_ss = 0, sigma_heading = 0;
-
-    itemElement->QueryDoubleAttribute("sigma_ss", &sigma_ss) ;
-    itemElement->QueryDoubleAttribute("sigma_heading", &sigma_heading) ;
+    double sigma_ss    = om["sigma_ss"].as<double>();
+    double sigma_heading = om["sigma_heading"].as<double>();
 
     this->sigma_ << sigma_ss << endr;
+    sigmaHeading_ << sigma_heading << endr;
 
-    sigmaHeading_<<sigma_heading<<endr;
-
-
-    OMPL_INFORM("HeadingBeaconObservationModel: sigma_ss = ");
-    std::cout<<sigma_ss<<std::endl;
-
-    OMPL_INFORM("HeadingBeaconObservationModel: sigma_heading = ");
-    std::cout<<sigma_heading<<std::endl;
-
+    OMPL_INFORM("HeadingBeaconObservationModel: sigma_ss = %f", sigma_ss);
+    OMPL_INFORM("HeadingBeaconObservationModel: sigma_heading = %f", sigma_heading);
 }

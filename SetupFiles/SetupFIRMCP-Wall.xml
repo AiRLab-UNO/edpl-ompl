@@ -90,6 +90,7 @@
     <maxPOMCPDepth maxPOMCPDepth = "5" />
 <!--     <maxFIRMReachDepth maxFIRMReachDepth = "300" /> -->
     <maxFIRMReachDepth maxFIRMReachDepth = "200" />
+    <nSigmaForPOMCPParticle nSigmaForPOMCPParticle = "3.0" />
 
 <!--     <cExplorationForSimulate cExplorationForSimulate = "0.0" />  <!&#45;&#45; exploitative &#45;&#45;> -->
     <cExplorationForSimulate cExplorationForSimulate = "0.000000001" />
@@ -107,7 +108,7 @@
 <!--     <costToGoRegulatorWithinReach costToGoRegulatorWithinReach = "1000.0" />  <!&#45;&#45; explorative &#45;&#45;> -->
     <cExploitationForRolloutWithinReach cExploitationForRolloutWithinReach = "10.0" />  <!-- exploitative -->
     <costToGoRegulatorWithinReach costToGoRegulatorWithinReach = "1e-6" />  <!-- exploitative -->
-    <nEpsForIsReached nEpsForIsReached = "3.0" />
+    <nEpsilonForRolloutIsReached nEpsilonForRolloutIsReached = "3.0" />
 
     <!-- (these are determined from actual transition results) -->
     <heurPosStepSize heurPosStepSize = "0.1" />
@@ -120,6 +121,8 @@
 
     <scaleStabNumSteps scaleStabNumSteps = "30" />
 <!--     <scaleStabNumSteps scaleStabNumSteps = "50" /> -->
+
+    <nEpsilonForQVnodeMerging nEpsilonForQVnodeMerging = "50.0" />
 
     <inflationForApproxStabCost inflationForApproxStabCost= "100.0" />
 </FIRMCP>

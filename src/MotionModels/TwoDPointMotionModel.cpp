@@ -35,7 +35,7 @@
 /* Authors:  Saurav Agarwal, Ali-akbar Agha-mohammadi */
 
 
-#include <tinyxml.h>
+#include <yaml-cpp/yaml.h>
 #include "Spaces/R2BeliefSpace.h"
 #include "MotionModels/TwoDPointMotionModel.h"
 #include "Utils/FIRMUtils.h"
@@ -227,63 +227,24 @@ void TwoDPointMotionModel::loadParameters(const char *pathToSetupFile)
 {
     using namespace arma;
 
-    TiXmlDocument doc(pathToSetupFile);
-    bool loadOkay = doc.LoadFile();
+    YAML::Node config = YAML::LoadFile(pathToSetupFile);
+    const auto& mm = config["motion_model"];
 
-    if ( !loadOkay )
-    {
-        printf( "Could not load setup file in motion model. Error='%s'. Exiting.\n", doc.ErrorDesc() );
+    double sigmaV            = mm["sigma_v"].as<double>();
+    double etaV              = mm["eta_v"].as<double>();
+    double windNoisePos      = mm["wind_noise_pos"].as<double>();
+    double maxLinearVelocity = mm["max_linear_velocity"].as<double>();
+    double dt                = mm["dt"].as<double>();
 
-        exit( 1 );
-    }
-
-    TiXmlNode* node = 0;
-    TiXmlElement* itemElement = 0;
-
-    node = doc.FirstChild( "MotionModels" );
-    assert( node );
-
-    TiXmlNode* child = 0;
-
-    child = node->FirstChild("TwoDPointMotionModel");
-
-    assert( child );
-    itemElement = child->ToElement();
-    assert( itemElement );
-
-    double sigmaV=0;
-    double etaV = 0;
-    double windNoisePos=0;
-    double maxLinearVelocity=0;
-    double dt = 0;
-
-    itemElement->QueryDoubleAttribute("sigmaV", &sigmaV) ;
-    itemElement->QueryDoubleAttribute("etaV", &etaV) ;
-    itemElement->QueryDoubleAttribute("wind_noise_pos", &windNoisePos) ;
-    itemElement->QueryDoubleAttribute("max_linear_velocity", &maxLinearVelocity) ;
-    itemElement->QueryDoubleAttribute("dt", &dt) ;
-
-    this->sigma_ << sigmaV << sigmaV <<endr;
-    this->eta_  << etaV << etaV << endr;
+    this->sigma_ << sigmaV << sigmaV << endr;
+    this->eta_   << etaV   << etaV   << endr;
 
     rowvec Wg_root_vec(2);
     Wg_root_vec << windNoisePos << windNoisePos << endr;
     P_Wg_ = diagmat(square(Wg_root_vec));
 
-    maxLinearVelocity_  = maxLinearVelocity;
-    dt_                 = dt;
+    maxLinearVelocity_ = maxLinearVelocity;
+    dt_                = dt;
 
-    OMPL_INFORM("TwoDPointMotionModel: sigma_ = ");
-    std::cout<<sigma_<<std::endl;
-
-    OMPL_INFORM("TwoDPointMotionModel: eta_ = ");
-    std::cout<<eta_<<std::endl;
-
-    OMPL_INFORM("TwoDPointMotionModel: P_Wg_ = ");
-    std::cout<<P_Wg_<<std::endl;
-
-    OMPL_INFORM("TwoDPointMotionModel: max Linear Velocity (m/s)    = %f", maxLinearVelocity_);
-
-    OMPL_INFORM("TwoDPointMotionModel: Timestep (seconds) = %f", dt_);
-
+    OMPL_INFORM("TwoDPointMotionModel: max linear vel = %f, dt = %f", maxLinearVelocity_, dt_);
 }

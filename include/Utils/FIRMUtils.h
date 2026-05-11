@@ -52,11 +52,11 @@ class FIRMUtils
         /** \brief Generates a random number within the give range */
         static int generateRandomIntegerInRange(const int floor, const int ceiling);
 
-        /** \brief Save the FIRM graph to an XML file */
-        static void writeFIRMGraphToXML(const std::vector<std::pair<int,std::pair<arma::colvec,arma::mat> > > nodes, const std::vector<std::pair<std::pair<int,int>,FIRMWeight> > edgeWeights, const std::string &outputPath = "./");
+        /** \brief Save the FIRM graph to a YAML file */
+        static void writeFIRMGraphToYAML(const std::vector<std::pair<int,std::pair<arma::colvec,arma::mat> > > nodes, const std::vector<std::pair<std::pair<int,int>,FIRMWeight> > edgeWeights, const std::string &outputPath = "./");
 
-        /** \brief Reads the Graph properties from an XML file */
-        static bool readFIRMGraphFromXML(const std::string &pathToXML,std::vector<std::pair<int, arma::colvec> > &FIRMNodePosList, std::vector<std::pair<int, arma::mat> > &FIRMNodeCovarianceList, std::vector<std::pair<std::pair<int,int>,FIRMWeight> > &edgeWeights);
+        /** \brief Reads the Graph properties from a YAML file */
+        static bool readFIRMGraphFromYAML(const std::string &pathToYAML, std::vector<std::pair<int, arma::colvec> > &FIRMNodePosList, std::vector<std::pair<int, arma::mat> > &FIRMNodeCovarianceList, std::vector<std::pair<std::pair<int,int>,FIRMWeight> > &edgeWeights);
 
         /** \brief Convert degree to radian */
         static double degree2Radian(double deg);
