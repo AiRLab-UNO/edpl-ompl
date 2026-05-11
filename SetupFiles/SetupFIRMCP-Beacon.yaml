@@ -67,10 +67,10 @@ planning_problem:
   dynamic_obstacles: false
   environment_file: ./Models/FIRMCP_Wall_0.obj
   robot_file: ./Models/iRobot_thin.obj
-  roadmap_file: ""
-  use_roadmap: false
+  roadmap_file: "./run-20260511T082155/FIRMRoadMap-20260511T082207.yaml"
+  use_roadmap: true
   firm_nodes_min: 400
-  firm_nodes_max: 452
+  firm_nodes_max: 852
   start: {x: 2.0, y: 10.0}
   planning_time: 800.0
   kidnapped_state: {x: 1.5, y: 19.5}

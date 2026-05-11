@@ -444,7 +444,7 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
         }
         siF_->setTrueState(sampState);  // true state is only used for collision check by checkTrueStateValidity()
         // for debug
-        std::cout << currentVertex;
+        // std::cout << currentVertex;
 
         // run Monte Carlo simulation for one particle and update cost-to-go and number of visits
         int currentDepth = 0;
@@ -454,7 +454,7 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
         double totalCostToGo = pomcpSimulate(currentVertex, currentDepth, selectedEdgeDummy, collisionDepth);
 
         // for debug
-        std::cout << "thisQVmincosttogo: " << totalCostToGo << std::endl;
+        // std::cout << "thisQVmincosttogo: " << totalCostToGo << std::endl;
     }
 
 
@@ -465,13 +465,13 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
     Vertex childQnode, selectedChildQnode;
     double childQcosttogo;
     // for debug
-    std::cout << "childQcosttogoes: ";
+    // std::cout << "childQcosttogoes: ";
     for (int j=0; j<childQnodes.size(); j++)
     {
         childQnode = childQnodes[j];
         childQcosttogo = stateProperty_[currentVertex]->as<FIRM::StateType>()->getChildQcosttogo(childQnode);
         // for debug
-        std::cout << "[" << childQnode << "]" << childQcosttogo << " ";
+        // //  std::cout << "[" << childQnode << "]" << childQcosttogo << " ";
 
         if (minQcosttogo >= childQcosttogo)
         {
@@ -498,10 +498,10 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
     Edge selectedEdge = boost::edge(currentVertex, selectedChildQnode, g_).first;
 
     // for debug
-    std::cout << std::endl;
-    std::cout << "minQcosttogo: " << "[" << selectedChildQnode << "]" << minQcosttogo << std::endl;
-    std::cout << "executionCost: " << executionCost_ << std::endl;
-    std::cout << "expTotalCost: " << minQcosttogo + executionCost_ << std::endl;
+    // std::cout << std::endl;
+    // std::cout << "minQcosttogo: " << "[" << selectedChildQnode << "]" << minQcosttogo << std::endl;
+    // std::cout << "executionCost: " << executionCost_ << std::endl;
+    // std::cout << "expTotalCost: " << minQcosttogo + executionCost_ << std::endl;
 
 
     // restore the current true state
@@ -611,10 +611,10 @@ double FIRMCP::pomcpSimulate(const Vertex currentVertex, const int currentDepth,
         return infiniteCostToGo_;
     }
     // for debug
-    if (currentDepth < maxPOMCPDepth_)
-        std::cout << "-[" << selectedChildQnode << "]-" << evolvedVertex;
-    else
-        std::cout << ".[" << selectedChildQnode << "]." << evolvedVertex;
+    // if (currentDepth < maxPOMCPDepth_)
+    //     std::cout << "-[" << selectedChildQnode << "]-" << evolvedVertex;
+    // else
+    //     std::cout << ".[" << selectedChildQnode << "]." << evolvedVertex;
 
 
     // RECURSIVELY CALL pomcpSimulate()
@@ -692,7 +692,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
             //Visualizer::setChosenRolloutConnection(stateProperty_[currentVertex], stateProperty_[targetNode]);
 
             // for debug
-            std::cout << std::endl;
+            // std::cout << std::endl;
 
             // compute approximate edge cost and cost-to-go
             double approxEdgeCost = computeApproxEdgeCost(currentVertex, targetVertex);
@@ -842,10 +842,10 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
         return infiniteCostToGo_;
     }
     // for debug
-    if (currentDepth < maxPOMCPDepth_)
-        std::cout << "~(" << selectedChildQnode << ")~" << evolvedVertex;
-    else
-        std::cout << ".(" << selectedChildQnode << ")." << evolvedVertex;
+    // if (currentDepth < maxPOMCPDepth_)
+    //     std::cout << "~(" << selectedChildQnode << ")~" << evolvedVertex;
+    // else
+    //     std::cout << ".(" << selectedChildQnode << ")." << evolvedVertex;
 
 
     // RECURSIVELY CALL pomcpRollout()
@@ -1081,8 +1081,8 @@ FIRMWeight FIRMCP::addEdgeToPOMCPTreeWithApproxCost(const FIRM::Vertex a, const 
     EdgeControllerType edgeController;
 
     // for debug
-    if(ompl::magic::PRINT_MC_PARTICLES)
-        std::cout << "=================================================" << std::endl;
+    // if(ompl::magic::PRINT_MC_PARTICLES)
+    //     std::cout << "=================================================" << std::endl;
 
     // HACK WORKAROUNDS FOR INDEFINITE STABILIZATION DURING ROLLOUT: {3} EDGE COST WITH A BORDER BELIEF STATE
     // apply the edge cost computation option

@@ -356,7 +356,7 @@ bool Controller<SeparatedControllerType, FilterType>::Execute(const ompl::base::
 
             if(!si_->checkTrueStateValidity())
             {
-                std::cout << "Failed in checkTrueStateValidity() test!" << std::endl;
+                // std::cout << "Failed in checkTrueStateValidity() test!" << std::endl;
                 si_->copyState(endState, internalState);
 
                 ompl::base::Cost stabilizationFilteringCost(0);
@@ -377,7 +377,7 @@ bool Controller<SeparatedControllerType, FilterType>::Execute(const ompl::base::
             }
             else if(!si_->isValid(internalState))
             {
-                std::cout << "Failed in isValid(internalState) test!" << std::endl;
+                // std::cout << "Failed in isValid(internalState) test!" << std::endl;
 
                 si_->copyState(endState, internalState);
 
@@ -798,7 +798,7 @@ bool Controller<SeparatedControllerType, FilterType>::Stabilize(const ompl::base
     {
         if(tries_ > maxTries_)
         {
-            std::cout << "Failed to Stabilize() within " << maxTries_ << " iterations!" << std::endl;
+            //std::cout << "Failed to Stabilize() within " << maxTries_ << " iterations!" << std::endl;
 
             stabilizationFilteringCost = ompl::base::Cost(cost);
             si_->copyState(endState, tempState2);
