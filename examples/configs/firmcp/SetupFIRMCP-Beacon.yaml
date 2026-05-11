@@ -67,7 +67,7 @@ planning_problem:
   dynamic_obstacles: false
   environment_file: ../examples/configs/Models/FIRMCP_Wall_0.obj
   robot_file: ../examples/configs/Models/iRobot_thin.obj
-  roadmap_file: ""
+  roadmap_file: "../results/run-20260511T142655/FIRMRoadMap-20260511T142826.yaml"
   use_roadmap: true
   firm_nodes_min: 400
   firm_nodes_max: 852
