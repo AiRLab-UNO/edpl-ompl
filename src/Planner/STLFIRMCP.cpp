@@ -224,6 +224,11 @@ double STLFIRMCP::computeCostToGoForNeighbor(const Vertex from, const Vertex to,
     // FIRM global heuristic (equation [29]-[30] in the BVL paper)
     double firmCost = edgeCost + getCostToGoWithApproxStabCost(to);
 
+    // Guard: if the goal position is not yet cached (graph still being built),
+    // fall back to the pure FIRM heuristic to avoid garbage dist_goal values.
+    if (!goalCached_ && goalM_.empty())
+        return firmCost;
+
     // STL smooth robustness: ρ > 0 when spec satisfied
     //   → cost contribution = −ρ * scale  (lower is better when ρ is larger)
     double rho     = evaluateSTLRobustness(from, to);

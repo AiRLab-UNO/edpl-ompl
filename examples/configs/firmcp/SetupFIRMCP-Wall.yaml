@@ -23,7 +23,7 @@ motion_model:
 firm:
   data_log:
     save: true
-    folder: "./"
+    folder: "../results/"
   save_roadmap: true
   mc_particles: 5
   rollout_steps: 1
@@ -61,6 +61,34 @@ firmcp:
   scale_stab_num_steps: 30
   n_epsilon_for_qv_node_merging: 50.0
   inflation_for_approx_stab_cost: 100
+
+stl_firmcp:
+  # STLRom syntax: alw_/ev_, signal[t], < or >, and/or
+  # Signals (col layout): tr_cov=col1, dist_goal=col2
+  # Params are declared automatically from cov_max/eps_goal below.
+  stl_formula: |
+    phi_info  := tr_cov[t] < cov_max
+    phi_reach := dist_goal[t] < eps_goal
+    phi := alw_[0, 1] phi_info and ev_[0, 1] phi_reach
+
+  # Belief quality threshold: trace(P) must stay below this value
+  cov_max: 1.0
+
+  # Goal-reaching distance threshold [m]
+  eps_goal: 2.0
+
+  # Blend weight λ in [0,1]: 0 = pure FIRM heuristic, 1 = pure STL cost
+  lambda_stl: 0.3
+
+  # Scale factor to bring -ρ into FIRM cost-to-go range
+  # (obstacle_cost_to_go ≈ 20000, so scale accordingly)
+  stl_cost_scale: 5000.0
+
+  # Smooth approximation temperature (higher → closer to exact min/max)
+  smooth_tau: 1.0
+
+  # Smooth approximation type: LSE (log-sum-exp), SOFTMAX, or EXACT
+  smooth_type: LSE
 
 planning_problem:
   planner_method: 3        # 0=FIRM 1=Rollout 2=MultiModal 3=FIRMCP

@@ -88,24 +88,24 @@ stl_firmcp:
   eps_goal: 2.0
 
   # Blend weight λ in [0,1]: 0 = pure FIRM heuristic, 1 = pure STL cost
-  lambda_stl: 0.3
+  lambda_stl: 1.0
 
   # Scale factor to bring -ρ into FIRM cost-to-go range
   # (obstacle_cost_to_go ≈ 20000, so scale accordingly)
-  stl_cost_scale: 5000.0
+  stl_cost_scale: 20000.0
 
   # Smooth approximation temperature (higher → closer to exact min/max)
   smooth_tau: 1.0
 
   # Smooth approximation type: LSE (log-sum-exp), SOFTMAX, or EXACT
-  smooth_type: LSE
+  smooth_type: SOFTMAX
 
 planning_problem:
   planner_method: 3        # 0=FIRM 1=Rollout 2=MultiModal 3=FIRMCP
   dynamic_obstacles: false
   environment_file: ../examples/configs/Models/FIRMCP_Wall_0.obj
   robot_file: ../examples/configs/Models/iRobot_thin.obj
-  roadmap_file: "../results/run-20260511T142655/FIRMRoadMap-20260511T142826.yaml"
+  roadmap_file: "../examples/configs/Roadmaps/FIRMRoadMap-Beacon.yaml"
   use_roadmap: true
   firm_nodes_min: 400
   firm_nodes_max: 852
