@@ -110,6 +110,15 @@ protected:
      */
     virtual double computeCostToGoForNeighbor(const Vertex from, const Vertex to, double edgeCost);
 
+    /** rief Begin a new rollout trajectory trace. Default is a no-op. */
+    virtual void beginRolloutTrajectory();
+
+    /** rief Record a vertex/state visited during the current rollout trajectory. Default is a no-op. */
+    virtual void recordRolloutTrajectoryVertex(const Vertex vertex);
+
+    /** rief Finalize the cost-to-go for the current rollout trajectory. Default is identity. */
+    virtual double finalizeRolloutTrajectoryCost(const double totalCostToGo);
+
 
     /** \brief A table that stores the cost-to-go updated with approximate stabilization cost along the feedback path*/
     std::map <Vertex, double> costToGoWithApproxStabCost_;

@@ -99,7 +99,7 @@ planning_problem:
   dynamic_obstacles: false
   environment_file: ../examples/configs/Models/iLQG-TRO-Task1-Pole9x9.obj
   robot_file: ../examples/configs/Models/iRobot_thin.obj
-  roadmap_file: "../examples/configs/Roadmaps/FIRMCPRoadMap.yaml"
+  roadmap_file: ../examples/configs/Roadmaps/FIRMCPRoadMap.yaml
   use_roadmap: true
   firm_nodes_min: 500
   firm_nodes_max: 600

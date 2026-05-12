@@ -32,7 +32,7 @@
 *  POSSIBILITY OF SUCH DAMAGE.
 *********************************************************************/
 
-/* Authors: Sung Kyun Kim et al. */
+/* Authors: Redwan Newaz et al. */
 
 #include "Planner/STLFIRMCP.h"
 #include <yaml-cpp/yaml.h>
@@ -45,16 +45,16 @@ STLFIRMCP::STLFIRMCP(const firm::SpaceInformation::SpaceInformationPtr &si, bool
     : FIRMCP(si, debugMode)
     , covMax_(1.0)
     , epsGoal_(1.0)
+    , firmCostMax_(1000.0)
     , lambdaStl_(0.3)
     , stlCostScale_(1000.0)
     , smoothTau_(1.0)
-    , smoothType_(STLRom::SmoothType::LSE)
+    , smoothType_(STLRom::SmoothType::SOFTMAX)
     , goalX_(0.0), goalY_(0.0)
     , goalCached_(false)
-    // Default STL specification (overridden from YAML):
-    //   phi_info  : covariance stays below cov_max (belief quality)
-    //   phi_reach : distance to goal drops below eps_goal (reachability)
-    , stlFormulaStr_("phi := G[0,1](cov_max - tr_cov >= 0) & F[0,1](eps_goal - dist_goal >= 0)")
+    , stlFormulaStr_("phi_safe := alw_[0,1] (safe[t] > 0)\nphi_firm := alw_[0,1] (firm_cost_max - firm_cost[t] > 0)\nphi_info := alw_[0,1] (cov_max - tr_cov[t] > 0)\nphi_reach := ev_[0,1] (eps_goal - dist_goal[t] > 0)\nphi := phi_safe and phi_firm and phi_info and phi_reach")
+    , cachedRolloutCost_(0.0)
+    , rolloutCostCached_(false)
 {
 }
 
@@ -83,6 +83,9 @@ void STLFIRMCP::loadParametersFromFile(const std::string &pathToFile)
     if (sc["eps_goal"])
         epsGoal_ = sc["eps_goal"].as<double>();
 
+    if (sc["firm_cost_max"])
+        firmCostMax_ = sc["firm_cost_max"].as<double>();
+
     if (sc["lambda_stl"])
         lambdaStl_ = sc["lambda_stl"].as<double>();
 
@@ -109,6 +112,42 @@ void STLFIRMCP::loadParametersFromFile(const std::string &pathToFile)
     buildSTLMonitor();
 }
 
+void STLFIRMCP::beginRolloutTrajectory()
+{
+    rolloutTrajectory_.clear();
+    rolloutCostCached_ = false;
+    cachedRolloutCost_ = 0.0;
+}
+
+void STLFIRMCP::recordRolloutTrajectoryVertex(const Vertex vertex)
+{
+    if (rolloutTrajectory_.empty() || rolloutTrajectory_.back() != vertex)
+        rolloutTrajectory_.push_back(vertex);
+}
+
+double STLFIRMCP::finalizeRolloutTrajectoryCost(const double totalCostToGo)
+{
+    // FIRMCP calls this at every return point in the recursive pomcpSimulate /
+    // pomcpRollout chain.  We must evaluate STL exactly once per particle and
+    // return the same value for all subsequent recursive calls so that the costs
+    // do not compound across recursion levels.
+    if (rolloutCostCached_)
+        return cachedRolloutCost_;
+
+    // Not enough trajectory data yet – fall back to the FIRM cost.
+    if (rolloutTrajectory_.size() < 2)
+        return totalCostToGo;
+
+    const double rho = evaluateSTLRobustness(rolloutTrajectory_);
+    cachedRolloutCost_ = -rho * stlCostScale_;
+    rolloutCostCached_ = true;
+
+    OMPL_INFORM("STLFIRMCP: rho=%.4f  stl_cost=%.1f  traj_len=%zu",
+                rho, cachedRolloutCost_, rolloutTrajectory_.size());
+
+    return cachedRolloutCost_;
+}
+
 // ---------------------------------------------------------------------------
 // STL monitor construction
 // ---------------------------------------------------------------------------
@@ -130,9 +169,10 @@ void STLFIRMCP::buildSTLMonitor()
      *   - and / or               (not & / |)
      */
     std::ostringstream spec;
-    spec << "signal tr_cov, dist_goal\n";
-    spec << "param cov_max = " << covMax_
-         << ", eps_goal = "  << epsGoal_ << "\n";
+        spec << "signal tr_cov, dist_goal, safe, firm_cost\n";
+        spec << "param cov_max = " << covMax_
+            << ", eps_goal = "  << epsGoal_
+            << ", firm_cost_max = " << firmCostMax_ << "\n";
     spec << stlFormulaStr_ << "\n";
 
     const std::string fullSpec = spec.str();
@@ -156,16 +196,21 @@ void STLFIRMCP::buildSTLMonitor()
     // (the monitor keeps its own map after parsing)
     stlMonitor_.param_map["cov_max"]  = covMax_;
     stlMonitor_.param_map["eps_goal"] = epsGoal_;
+    stlMonitor_.param_map["firm_cost_max"] = firmCostMax_;
 
     OMPL_INFORM("STLFIRMCP: STL monitor built.  Formula: %s", stlFormulaStr_.c_str());
 }
 
 // ---------------------------------------------------------------------------
-// STL robustness evaluation on a 2-point trace (from → to)
+// STL robustness evaluation on the full rollout trajectory
 // ---------------------------------------------------------------------------
 
-double STLFIRMCP::evaluateSTLRobustness(const Vertex from, const Vertex to)
+double STLFIRMCP::evaluateSTLRobustness(const std::vector<Vertex> &trajectory)
 {
+    // Need at least two vertices so the STL monitor has a valid time interval.
+    if (trajectory.size() < 2)
+        return 0.0;
+
     // -----------------------------------------------------------------------
     // Lazily cache goal position (available after the graph is solved)
     // -----------------------------------------------------------------------
@@ -178,39 +223,40 @@ double STLFIRMCP::evaluateSTLRobustness(const Vertex from, const Vertex to)
     }
 
     // -----------------------------------------------------------------------
-    // Extract signals at both endpoints
-    // -----------------------------------------------------------------------
-    ompl::base::State* stateFrom = stateProperty_[from];
-    ompl::base::State* stateTo   = stateProperty_[to];
-
-    double trCovFrom    = stateFrom->as<FIRM::StateType>()->getTraceCovariance();
-    double trCovTo      = stateTo->as<FIRM::StateType>()->getTraceCovariance();
-
-    double xFrom = stateFrom->as<FIRM::StateType>()->getX();
-    double yFrom = stateFrom->as<FIRM::StateType>()->getY();
-    double xTo   = stateTo->as<FIRM::StateType>()->getX();
-    double yTo   = stateTo->as<FIRM::StateType>()->getY();
-
-    double distGoalFrom = std::sqrt((xFrom - goalX_) * (xFrom - goalX_) +
-                                    (yFrom - goalY_) * (yFrom - goalY_));
-    double distGoalTo   = std::sqrt((xTo   - goalX_) * (xTo   - goalX_) +
-                                    (yTo   - goalY_) * (yTo   - goalY_));
-
-    // -----------------------------------------------------------------------
-    // Build 2-point trace and evaluate
+    // Build full trace and evaluate
     // -----------------------------------------------------------------------
     stlMonitor_.reset_signal_data();
+
     stlMonitor_.set_eval_time(0.0, 1.0);
 
-    // Sample format: {time, tr_cov (col 1), dist_goal (col 2)}
-    stlMonitor_.add_sample({0.0, trCovFrom, distGoalFrom});
-    stlMonitor_.add_sample({1.0, trCovTo,   distGoalTo});
+    for (size_t i = 0; i < trajectory.size(); ++i)
+    {
+        ompl::base::State *state = stateProperty_[trajectory[i]];
+
+        const double trCov = state->as<FIRM::StateType>()->getTraceCovariance();
+        const double x = state->as<FIRM::StateType>()->getX();
+        const double y = state->as<FIRM::StateType>()->getY();
+        const double distGoal = std::sqrt((x - goalX_) * (x - goalX_) +
+                                          (y - goalY_) * (y - goalY_));
+        const double safe = si_->isValid(state) ? 1.0 : 0.0;
+        const double firmCost = getCostToGoWithApproxStabCost(trajectory[i]);
+
+        // Sample format: {time, tr_cov, dist_goal, safe, firm_cost}
+        const double t = (trajectory.size() == 1) ? 0.0
+                         : static_cast<double>(i) / static_cast<double>(trajectory.size() - 1);
+        stlMonitor_.add_sample({t, trCov, distGoal, safe, firmCost});
+    }
 
     // Update parameter values (may have been tuned; param_map is used at eval)
     stlMonitor_.param_map["cov_max"]  = covMax_;
     stlMonitor_.param_map["eps_goal"] = epsGoal_;
+    stlMonitor_.param_map["firm_cost_max"] = firmCostMax_;
 
-    double rho = stlMonitor_.eval_smooth_rob(smoothTau_, smoothType_);
+    double rho = 0.0;
+    if (smoothType_ == STLRom::SmoothType::EXACT)
+        rho = stlMonitor_.eval_rob(0.0, 1.0);
+    else
+        rho = stlMonitor_.eval_smooth_rob(0.0, 1.0, smoothTau_, smoothType_);
 
     return rho;   // positive = satisfied, negative = violated
 }
@@ -221,21 +267,19 @@ double STLFIRMCP::evaluateSTLRobustness(const Vertex from, const Vertex to)
 
 double STLFIRMCP::computeCostToGoForNeighbor(const Vertex from, const Vertex to, double edgeCost)
 {
-    // FIRM global heuristic (equation [29]-[30] in the BVL paper)
-    double firmCost = edgeCost + getCostToGoWithApproxStabCost(to);
+    // Extend the current rollout trajectory with 'to' so that each neighbor
+    // gets an individual STL estimate that reflects its own state.  Without
+    // this, every neighbor shares the same trajectory robustness and the
+    // importance sampling in pomcpRollout is effectively uniform.
+    std::vector<Vertex> extTraj = rolloutTrajectory_;
+    if (extTraj.empty() || extTraj.back() != to)
+        extTraj.push_back(to);
 
-    // Guard: if the goal position is not yet cached (graph still being built),
-    // fall back to the pure FIRM heuristic to avoid garbage dist_goal values.
-    if (!goalCached_ && goalM_.empty())
-        return firmCost;
+    // Fall back to the FIRM heuristic when the extended trajectory is still
+    // too short for meaningful STL evaluation (e.g. very first expansion).
+    if (extTraj.size() < 2)
+        return edgeCost + getCostToGoWithApproxStabCost(to);
 
-    // STL smooth robustness: ρ > 0 when spec satisfied
-    //   → cost contribution = −ρ * scale  (lower is better when ρ is larger)
-    double rho     = evaluateSTLRobustness(from, to);
-    double stlCost = -rho * stlCostScale_;
-
-    // Blended heuristic
-    double blended = (1.0 - lambdaStl_) * firmCost + lambdaStl_ * stlCost;
-
-    return blended;
+    const double rho = evaluateSTLRobustness(extTraj);
+    return -rho * stlCostScale_;
 }

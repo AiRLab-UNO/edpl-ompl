@@ -213,7 +213,6 @@ void FIRMCP::executeFeedbackWithPOMCP(void)
 
             // update currentVertex for next iteration
             Vertex previousVertex = currentVertex;  // backup for POMCP tree pruning
-            currentVertex = evolvedVertex;
 
             // if want/do not want to show monte carlo sim
             siF_->showRobotVisualization(ompl::magic::SHOW_MONTE_CARLO);
@@ -221,7 +220,6 @@ void FIRMCP::executeFeedbackWithPOMCP(void)
 
             // SELECT THE BEST ACTION
             e = generatePOMCPPolicy(currentVertex, goal);
-            targetNode = boost::target(e, g_);
 
             // if the edge controller of the last execution is being used again now, apply the kStep'th open-loop control of the edge controller
             if (e == e_prev)
@@ -442,7 +440,10 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
             OMPL_WARN("Could not sample a true state from the current belief state!");
             continue;
         }
-        siF_->setTrueState(sampState);  // true state is only used for collision check by checkTrueStateValidity()
+
+        beginRolloutTrajectory();
+        recordRolloutTrajectoryVertex(currentVertex);
+
         // for debug
         // std::cout << currentVertex;
 
@@ -486,6 +487,15 @@ FIRM::Edge FIRMCP::generatePOMCPPolicy(const FIRM::Vertex currentVertex, const F
     if (minQcosttogoNodes.size()==1)
     {
         selectedChildQnode = minQcosttogoNodes[0];
+    }
+    else if (minQcosttogoNodes.empty())
+    {
+        OMPL_WARN("FIRMCP: POMCP produced no valid child actions; falling back to rollout policy.");
+        siF_->setTrueState(tempTrueStateCopy);
+        Visualizer::setMode(Visualizer::VZRDrawingMode::RolloutMode);
+        siF_->freeState(tempTrueStateCopy);
+        siF_->freeState(sampState);
+        return generateRolloutPolicy(currentVertex, goal);
     }
     else
     {
@@ -533,7 +543,7 @@ double FIRMCP::pomcpSimulate(const Vertex currentVertex, const int currentDepth,
         // total cost-to-go from this node
         double totalCostToGo = pomcpRollout(currentVertex, currentDepth, selectedEdgePrev, collisionDepth, isNewNodeExpanded);
 
-        return totalCostToGo;
+        return finalizeRolloutTrajectoryCost(totalCostToGo);
     }
 
     // call pomcpRollout() if the current depth is out of the finite horizon of the POMCP tree
@@ -542,7 +552,7 @@ double FIRMCP::pomcpSimulate(const Vertex currentVertex, const int currentDepth,
         // total cost-to-go from this node
         double totalCostToGo = pomcpRollout(currentVertex, currentDepth, selectedEdgePrev, collisionDepth);
 
-        return totalCostToGo;
+        return finalizeRolloutTrajectoryCost(totalCostToGo);
     }
 
 
@@ -581,6 +591,11 @@ double FIRMCP::pomcpSimulate(const Vertex currentVertex, const int currentDepth,
     {
         selectedChildQnode = minQcosttogoNodes[0];
     }
+    else if (minQcosttogoNodes.empty())
+    {
+        OMPL_WARN("FIRMCP: No valid child action in pomcpSimulate; returning obstacle cost.");
+        return finalizeRolloutTrajectoryCost(obstacleCostToGo_);
+    }
     else
     {
         assert(minQcosttogoNodes.size()!=0);
@@ -599,6 +614,8 @@ double FIRMCP::pomcpSimulate(const Vertex currentVertex, const int currentDepth,
     {
         OMPL_ERROR("Failed to executeSimulationFromUpto()!");
         executionCost = obstacleCostToGo_;
+        siF_->freeState(evolvedBelief);
+        return finalizeRolloutTrajectoryCost(obstacleCostToGo_);
     }
     Visualizer::clearRolloutConnections();
 
@@ -610,6 +627,7 @@ double FIRMCP::pomcpSimulate(const Vertex currentVertex, const int currentDepth,
         OMPL_ERROR("Failed to updateQVnodeBeliefOnPOMCPTree()!");
         return infiniteCostToGo_;
     }
+    recordRolloutTrajectoryVertex(evolvedVertex);
     // for debug
     // if (currentDepth < maxPOMCPDepth_)
     //     std::cout << "-[" << selectedChildQnode << "]-" << evolvedVertex;
@@ -659,7 +677,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
             currentBelief->as<FIRM::StateType>()->addThisQVvisit();                    // N(h) += 1
             currentBelief->as<FIRM::StateType>()->setThisQVmincosttogo(totalCostToGo);
 
-            return totalCostToGo;
+            return finalizeRolloutTrajectoryCost(totalCostToGo);
         }
 
 
@@ -678,7 +696,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
                 currentBelief->as<FIRM::StateType>()->addThisQVvisit();                    // N(h) += 1
                 currentBelief->as<FIRM::StateType>()->setThisQVmincosttogo(totalCostToGo);
 
-                return totalCostToGo;
+                return finalizeRolloutTrajectoryCost(totalCostToGo);
             }
         }
 
@@ -704,7 +722,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
             currentBelief->as<FIRM::StateType>()->addThisQVvisit();                    // N(h) += 1
             currentBelief->as<FIRM::StateType>()->setThisQVmincosttogo(approxCostToGo);
 
-            return approxCostToGo;
+            return finalizeRolloutTrajectoryCost(approxCostToGo);
         }
 
 
@@ -724,7 +742,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
             currentBelief->as<FIRM::StateType>()->addThisQVvisit();                    // N(h) += 1
             currentBelief->as<FIRM::StateType>()->setThisQVmincosttogo(totalCostToGo);
 
-            return totalCostToGo;
+            return finalizeRolloutTrajectoryCost(totalCostToGo);
         }
 
     } // if (currentDepth >= maxPOMCPDepth_)
@@ -749,7 +767,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
                 currentBelief->as<FIRM::StateType>()->addThisQVvisit();                    // N(h) += 1
                 currentBelief->as<FIRM::StateType>()->setThisQVmincosttogo(totalCostToGo);
 
-                return totalCostToGo;
+                return finalizeRolloutTrajectoryCost(totalCostToGo);
             }
         }
 
@@ -759,6 +777,15 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
 
         // get the connected neighbor list
         const std::vector<Vertex>& childQnodes = currentBelief->as<FIRM::StateType>()->getChildQnodes();
+
+        if (childQnodes.empty())
+        {
+            OMPL_WARN("FIRMCP: No child actions available during rollout; returning obstacle cost.");
+            double totalCostToGo = obstacleCostToGo_;
+            currentBelief->as<FIRM::StateType>()->addThisQVvisit();
+            currentBelief->as<FIRM::StateType>()->setThisQVmincosttogo(totalCostToGo);
+            return finalizeRolloutTrajectoryCost(totalCostToGo);
+        }
 
         // allot a section in the weight bar according to each weight
         std::vector<double> weightSections;  // upper limit of accumulated weight for each action
@@ -805,7 +832,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
         double weightPicked = weightPickedVec[0];
 
         // enumerate to find the matching weightSection, assuming that childQnodes.size() is not so big
-        int jSelected;
+        int jSelected = 0;
         for (int j=0; j<weightSections.size(); j++)
         {
             if (weightPicked < weightSections[j])
@@ -830,6 +857,8 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
     {
         OMPL_ERROR("Failed to executeSimulationFromUpto()!");
         executionCost = obstacleCostToGo_;
+        siF_->freeState(evolvedBelief);
+        return finalizeRolloutTrajectoryCost(obstacleCostToGo_);
     }
     Visualizer::clearRolloutConnections();
 
@@ -866,7 +895,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
         updateQVnodeValuesOnPOMCPTree(currentVertex, selectedChildQnode, executionStatus, executionCost, selectedChildQVmincosttogo, thisQVmincosttogoUpdated, isNewNodeExpanded);
 
         // return the minimum total cost-to-go over all explored trajectories
-        return thisQVmincosttogoUpdated;
+        return finalizeRolloutTrajectoryCost(thisQVmincosttogoUpdated);
     }
     // otherwise, just return the sum of execution costs along the trajectory plus the cost-to-go of the leaf
     else
@@ -879,7 +908,7 @@ double FIRMCP::pomcpRollout(const Vertex currentVertex, const int currentDepth, 
             selectedChildQcosttogoUpdated += obstacleCostToGo_;
 
         // return total cost-to-go along this trajectory
-        return selectedChildQcosttogoUpdated;
+        return finalizeRolloutTrajectoryCost(selectedChildQcosttogoUpdated);
     }
 }
 
@@ -1483,6 +1512,9 @@ bool FIRMCP::updateQVnodeBeliefOnPOMCPTree(const Vertex currentVertex, const Ver
     // check for coincident nodes on the POMCP tree
     for (const auto& childQVnode : selectedChildQVnodes)
     {
+        if (stateProperty_[childQVnode] == nullptr)
+            continue;
+
         // NOTE need to check for both directions since there is no from-to relationship between these selectedChildQVnodes
         // HACK larger/smaller nEpsilonForQVnodeMerging_ for looser/tighter threshold for merging
         if (stateProperty_[childQVnode]->as<FIRM::StateType>()->isReachedWithinNEpsilon(evolvedBelief, nEpsilonForQVnodeMerging_))
@@ -1609,6 +1641,8 @@ bool FIRMCP::updateQVnodeValuesOnPOMCPTree(const Vertex currentVertex, const Ver
 void FIRMCP::prunePOMCPTreeFrom(const Vertex rootVertex)
 {
     ompl::base::State* rootState = stateProperty_[rootVertex];
+    if (rootState == nullptr)
+        return;
 
     // recursively call prunePOMCPTreeFrom() to destruct the descendent nodes starting from the leaves
     if (rootState->as<FIRM::StateType>()->getChildQexpanded())
@@ -1651,7 +1685,11 @@ void FIRMCP::prunePOMCPNode(const Vertex rootVertex)
         }
 
         // free the memory of state
-        siF_->freeState(stateProperty_[rootVertex]);
+        if (stateProperty_[rootVertex] != nullptr)
+        {
+            siF_->freeState(stateProperty_[rootVertex]);
+            stateProperty_[rootVertex] = nullptr;
+        }
 
         // remove the node/edges from POMCP tree
         boost::clear_vertex(rootVertex, g_);     // remove all edges from or to rootVertex
@@ -1664,6 +1702,19 @@ double FIRMCP::computeCostToGoForNeighbor(const Vertex from, const Vertex to, do
 {
     // Default: FIRM global heuristic (approx edge cost + FIRM value function)
     return edgeCost + getCostToGoWithApproxStabCost(to);
+}
+
+void FIRMCP::beginRolloutTrajectory()
+{
+}
+
+void FIRMCP::recordRolloutTrajectoryVertex(const Vertex /*vertex*/)
+{
+}
+
+double FIRMCP::finalizeRolloutTrajectoryCost(const double totalCostToGo)
+{
+    return totalCostToGo;
 }
 
 // for FIRM-Rollout
@@ -1741,9 +1792,9 @@ FIRM::Edge FIRMCP::generateRolloutPolicy(const FIRM::Vertex currentVertex, const
 
 
         // for debug
-        if(ompl::magic::PRINT_COST_TO_GO)
-            //std::cout << "COST[" << currentVertex << "->" << targetNode << "->G] " << edgeCostToGo << " = " << transitionProbability << "*" << nextNodeCostToGo << " + " << "(1-" << transitionProbability << ")*" << obstacleCostToGo_ << " + " << edgeWeight.getCost() << std::endl;
-            std::cout << "COST[" << currentVertex << "->" << targetNode << "->G] " << edgeCostToGo << " = " << transitionProbability << "*" << nextNodeCostToGo << " + " << "(1-" << transitionProbability << ")*" << obstacleCostToGo_ << " + " << edgeWeight.getCost() << " + " << stationaryPenalty << std::endl;
+        // if(ompl::magic::PRINT_COST_TO_GO)
+        //     //std::cout << "COST[" << currentVertex << "->" << targetNode << "->G] " << edgeCostToGo << " = " << transitionProbability << "*" << nextNodeCostToGo << " + " << "(1-" << transitionProbability << ")*" << obstacleCostToGo_ << " + " << edgeWeight.getCost() << std::endl;
+        //     std::cout << "COST[" << currentVertex << "->" << targetNode << "->G] " << edgeCostToGo << " = " << transitionProbability << "*" << nextNodeCostToGo << " + " << "(1-" << transitionProbability << ")*" << obstacleCostToGo_ << " + " << edgeWeight.getCost() << " + " << stationaryPenalty << std::endl;
 
 
         if(edgeCostToGo < minCost)
@@ -1759,8 +1810,8 @@ FIRM::Edge FIRMCP::generateRolloutPolicy(const FIRM::Vertex currentVertex, const
     }
 
     // for debug
-    if(ompl::magic::PRINT_COST_TO_GO)
-        std::cout << "minC[" << minCostVertCurrent << "->" << minCostVertNext << "->G] " << minCost << std::endl;
+    // if(ompl::magic::PRINT_COST_TO_GO)
+    //     std::cout << "minC[" << minCostVertCurrent << "->" << minCostVertNext << "->G] " << minCost << std::endl;
 
     return edgeToTake;
 }

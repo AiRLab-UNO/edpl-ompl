@@ -15,10 +15,10 @@ motion_model:
   eta_omega: 0.0
   wind_noise_pos: 0.001
   wind_noise_ang: 1.0e-6
-  min_linear_velocity: -1.0
-  max_linear_velocity: 1.0
-  max_angular_velocity: 0.6
-  dt: 0.1
+  min_linear_velocity: -0.4
+  max_linear_velocity: 0.4
+  max_angular_velocity: 0.3
+  dt: 0.05
 
 firm:
   data_log:
@@ -26,12 +26,12 @@ firm:
     folder: "../results/"
   save_roadmap: true
   mc_particles: 5
-  rollout_steps: 1
+  rollout_steps: 2
   nn_radius: 2.25
-  num_nn: 10
+  num_nn: 12
   dp_discount_factor: 1.0
   dist_cost_weight: 0.1
-  connect_to_future_nodes: false
+  connect_to_future_nodes: true
   apply_stationary_penalty: true
   border_belief_sampling: false
   inf_cost_weight: 100.0
@@ -44,58 +44,64 @@ firm:
   dp_convergence_threshold: 0.1
 
 firmcp:
-  num_pomcp_particles: 3
-  max_pomcp_depth: 5
+  num_pomcp_particles: 10
+  max_pomcp_depth: 4
   max_firm_reach_depth: 200
-  n_sigma_for_pomcp_particle: 3.0
-  c_exploration_for_simulate: 1.0e-9
-  c_exploitation_out_of_reach: 10.0
-  c_exploitation_within_reach: 10.0
-  cost_to_go_regulator_out_of_reach: 1.0e-6
-  cost_to_go_regulator_within_reach: 1.0e-6
-  n_epsilon_for_rollout_is_reached: 3.0
-  heur_pos_step_size: 0.1
-  heur_ori_step_size: 0.05
-  heur_cov_step_size: 1.0e-5
-  cov_convergence_rate: 0.99
-  scale_stab_num_steps: 30
-  n_epsilon_for_qv_node_merging: 50.0
+  n_sigma_for_pomcp_particle: 2.0
+  c_exploration_for_simulate: 1.0
+  c_exploitation_out_of_reach: 3.0
+  c_exploitation_within_reach: 3.0
+  cost_to_go_regulator_out_of_reach: 1.0e-3
+  cost_to_go_regulator_within_reach: 1.0e-3
+  n_epsilon_for_rollout_is_reached: 2.0
+  heur_pos_step_size: 0.05
+  heur_ori_step_size: 0.03
+  heur_cov_step_size: 1.0e-6
+  cov_convergence_rate: 0.97
+  scale_stab_num_steps: 40
+  n_epsilon_for_qv_node_merging: 20.0
   inflation_for_approx_stab_cost: 100
 
 stl_firmcp:
-  # STL formula evaluated on a 2-point trace (from-node → to-node).
+  # STL formula evaluated on the full rollout trajectory.
   # Signals:
-  #   tr_cov    – trace of the belief covariance (lower = more confident)
-  #   dist_goal – Euclidean distance of the robot mean to the goal
+  #   tr_cov     – trace of the belief covariance (lower = more confident)
+  #   dist_goal  – Euclidean distance of the robot mean to the goal
+  #   safe       – collision-free state indicator (1 = safe, 0 = unsafe)
+  #   firm_cost  – heuristic FIRM cost-to-go for the visited vertex
   # Parameters (tunable below):
-  #   cov_max   – maximum acceptable trace(P)
-  #   eps_goal  – goal-reaching distance threshold
+  #   cov_max      – maximum acceptable trace(P)
+  #   eps_goal     – goal-reaching distance threshold
+  #   firm_cost_max – maximum acceptable heuristic FIRM cost
   #
-  # Robustness ρ > 0 when BOTH conditions are satisfied.
-  # Cost contribution = −ρ * stl_cost_scale  (negative = reward, positive = penalty).
-  # STLRom syntax: alw_/ev_, signal[t], < or >, and/or
-  # Signals (col layout): tr_cov=col1, dist_goal=col2
-  # Params are declared automatically from cov_max/eps_goal below.
+  # Robustness ρ > 0 when all conditions are satisfied.
+  # Cost contribution = −ρ * stl_cost_scale.
+  # STLRom syntax: alw_/ev_, signal[t], > / <, and
   stl_formula: |
-    phi_info  := tr_cov[t] < cov_max
-    phi_reach := dist_goal[t] < eps_goal
-    phi := alw_[0, 1] phi_info and ev_[0, 1] phi_reach
+    phi_safe  := alw_[0, 1] (safe[t] > 0)
+    phi_firm  := alw_[0, 1] (firm_cost_max - firm_cost[t] > 0)
+    phi_info  := alw_[0, 1] (cov_max - tr_cov[t] > 0)
+    phi_reach := ev_[0, 1] (eps_goal - dist_goal[t] > 0)
+    phi := phi_safe and phi_firm and phi_info and phi_reach
 
   # Belief quality threshold: trace(P) must stay below this value
-  cov_max: 1.0
+  cov_max: 0.8
 
   # Goal-reaching distance threshold [m]
-  eps_goal: 2.0
+  eps_goal: 1.0
 
-  # Blend weight λ in [0,1]: 0 = pure FIRM heuristic, 1 = pure STL cost
+  # Heuristic FIRM cost threshold (lower is better)
+  firm_cost_max: 25000.0
+
+  # Compatibility parameter retained for older configs (not used)
   lambda_stl: 1.0
 
   # Scale factor to bring -ρ into FIRM cost-to-go range
   # (obstacle_cost_to_go ≈ 20000, so scale accordingly)
-  stl_cost_scale: 20000.0
+  stl_cost_scale: 5000.0
 
   # Smooth approximation temperature (higher → closer to exact min/max)
-  smooth_tau: 1.0
+  smooth_tau: 2.0
 
   # Smooth approximation type: LSE (log-sum-exp), SOFTMAX, or EXACT
   smooth_type: SOFTMAX

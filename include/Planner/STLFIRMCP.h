@@ -42,29 +42,28 @@
 #include "STLRom/stl_monitor.h"
 #include "STLRom/smooth_approx.h"
 
+#include <vector>
+
 /**
  * \brief STLFIRMCP – FIRMCP with an STL-robustness-based heuristic.
  *
- * Extends FIRMCP by replacing the FIRM global cost-to-go heuristic with a
- * blend of:
- *   - the original FIRM heuristic  J̃_g(b→B_j)
- *   - an STL smooth-robustness penalty  -ρ * stlCostScale_
+ * Extends FIRMCP by using the STL robustness penalty as the only heuristic
+ * signal for both neighbor selection and rollout backup.
  *
  * The cost for a neighbor action (from → to) becomes:
  *
- *   h = (1 − λ) · firmCost  +  λ · (−ρ · scale)
+ *   h = −ρ · scale
  *
- * where ρ = phi.eval_smooth_rob(smoothTau_, smoothType_).
- * Canonically, ρ > 0 when the STL spec is satisfied (reward) so −ρ converts it
- * to a cost (lower is better), matching the FIRMCP min-cost-to-go formulation.
+ * where ρ is the robustness of the full rollout trajectory.
  *
  * The STL specification is a conjunction of:
- *   φ_info  : G[0,1](cov_max  − tr_cov   ≥ 0)  – belief covariance stays below cov_max
- *   φ_reach : F[0,1](eps_goal − dist_goal ≥ 0)  – robot reaches within eps_goal of goal
+ *   φ_safe  : G[0,1](safe > 0)                    – trajectory stays collision-free
+ *   φ_firm  : G[0,1](firm_cost_max − firm_cost > 0) – FIRM cost stays below a threshold
+ *   φ_info  : G[0,1](cov_max − tr_cov > 0)       – belief covariance stays below cov_max
+ *   φ_reach : F[0,1](eps_goal − dist_goal > 0)    – robot reaches within eps_goal of goal
  *
- * Both signals are evaluated on a minimal two-point trace:
- *   t=0 : state at vertex `from`
- *   t=1 : state at vertex `to`
+ * Both signals are evaluated over the full rollout trajectory collected during
+ * POMCP simulation, not just on the last edge endpoint pair.
  *
  * Parameters are loaded from the YAML setup file under the `stl_firmcp` key.
  */
@@ -82,15 +81,23 @@ public:
      *         sections from the YAML file and builds the STL monitor. */
     virtual void loadParametersFromFile(const std::string &pathToFile) override;
 
+    /** \\brief Reset the rollout trajectory before a new POMCP particle is simulated. */
+    virtual void beginRolloutTrajectory() override;
+
+    /** \\brief Record a visited vertex in the current rollout trajectory. */
+    virtual void recordRolloutTrajectoryVertex(const Vertex vertex) override;
+
+    /** \\brief Add the STL penalty for the full rollout trajectory to the returned total cost. */
+    virtual double finalizeRolloutTrajectoryCost(const double totalCostToGo) override;
+
 
 protected:
 
     /**
      * \brief Override FIRMCP's hook.
      *
-     * Returns  (1−λ)·firmCost + λ·(−ρ·scale)
-     * where firmCost = edgeCost + getCostToGoWithApproxStabCost(to)
-     * and   ρ        = smooth robustness of phi along the 2-point trace (from→to).
+        * Returns STL-only cost  h = −ρ·scale,
+        * where ρ is the (smooth) robustness of phi along the current rollout trace.
      */
     virtual double computeCostToGoForNeighbor(const Vertex from,
                                               const Vertex to,
@@ -108,10 +115,10 @@ private:
     void buildSTLMonitor();
 
     /**
-     * \brief Evaluate smooth STL robustness on the 2-point trace from→to.
+     * \brief Evaluate smooth STL robustness on the collected rollout trajectory.
      * \return ρ  (positive = satisfied, negative = violated)
      */
-    double evaluateSTLRobustness(const Vertex from, const Vertex to);
+    double evaluateSTLRobustness(const std::vector<Vertex> &trajectory);
 
     // -----------------------------------------------------------------------
     // Parameters (loaded from YAML stl_firmcp section)
@@ -126,10 +133,10 @@ private:
     /** Goal-reaching distance threshold [same units as state space]. */
     double epsGoal_;
 
-    /**
-     * Blend weight λ ∈ [0,1].
-     * 0 → pure FIRM heuristic, 1 → pure STL cost.
-     */
+    /** Maximum acceptable heuristic FIRM cost. */
+    double firmCostMax_;
+
+    /** Compatibility parameter retained in YAML. */
     double lambdaStl_;
 
     /**
@@ -141,12 +148,20 @@ private:
     /** Temperature for smooth approximation (higher = closer to exact min/max). */
     double smoothTau_;
 
-    /** Smooth approximation type: LSE (log-sum-exp) or MM (max-min). */
+    /** Smooth approximation type: LSE (log-sum-exp), SOFTMAX, or EXACT. */
     STLRom::SmoothType smoothType_;
 
     /** Cached goal position extracted from goalM_[0] at first evaluation. */
     double goalX_, goalY_;
     bool goalCached_;
+
+    /** Vertices visited by the current rollout trajectory. */
+    std::vector<Vertex> rolloutTrajectory_;
+
+    /** Cache for the STL cost computed the first time finalizeRolloutTrajectoryCost
+     *  is called for the current particle.  Reset each call to beginRolloutTrajectory(). */
+    double cachedRolloutCost_;
+    bool   rolloutCostCached_;
 };
 
 #endif // STLFIRMCP_PLANNER_H
